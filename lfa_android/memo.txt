@@ -1,0 +1,3 @@
+ビルド時の入力内容
+	エイリアス：lfa_android
+	パスワード：lfa_android
