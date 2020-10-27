@@ -1,0 +1,294 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:mx="library://ns.adobe.com/flex/mx" pageTitle="LFA物流・組立 部品棚管理システム"
+			   creationComplete="application1_creationCompleteHandler(event)">
+	<s:layout>
+		<s:VerticalLayout paddingLeft="8" paddingRight="8" paddingTop="8" paddingBottom="8" horizontalAlign="center" gap="8"/>
+	</s:layout>
+	<fx:Style source="lfa_inspection.css"/>
+	<fx:Script>
+
+		<![CDATA[
+			import flash.net.navigateToURL;
+
+			import flashx.textLayout.operations.SplitParagraphOperation;
+
+			import jp.co.ctc.entity.LgVSresult;
+			import jp.co.ctc.util.Utils;
+
+			import mx.collections.ArrayList;
+			import mx.collections.ICollectionView;
+			import mx.collections.IHierarchicalData;
+			import mx.collections.IList;
+			import mx.controls.Alert;
+			import mx.controls.LinkButton;
+			import mx.controls.advancedDataGridClasses.AdvancedDataGridItemRenderer;
+			import mx.effects.Pause;
+			import mx.events.AdvancedDataGridEvent;
+			import mx.events.CloseEvent;
+			import mx.events.CollectionEvent;
+			import mx.events.CollectionEventKind;
+			import mx.events.FlexEvent;
+			import mx.events.ListEvent;
+			import mx.events.PropertyChangeEvent;
+			import mx.formatters.DateFormatter;
+			import mx.managers.CursorManager;
+			import mx.rpc.events.ResultEvent;
+
+			// ファイル出力用
+			private var fileReference:FileReference;
+			private var TITLE:String = "搬入結果確認画面"
+
+			//検索項目を格納（CsvActionに遷移するときに渡す用の変数）
+			private var fromDate:String;
+			private var toDate:String;
+
+			/**
+			 * アプリケーション初期化時の処理。
+			 * ・ログインチェック
+			 * ・昨日の検査結果取得
+			 */
+			protected function application1_creationCompleteHandler(event:FlexEvent):void
+			{
+				//ログインチェック
+				srvUser.isLogin();
+				Alert.buttonWidth = 100;
+
+				//昨日のDateを作成
+				var now:Date = new Date();
+				var yesterDay:Date = new Date(now.fullYear,now.month,now.date-1);
+
+				//文字列として変換
+				var dateFormat:DateFormatter = new DateFormatter();
+				dateFormat.formatString = "YYYY/MM/DD";
+				var strYesterDay:String = dateFormat.format(yesterDay);
+
+				//初期表示として昨日の日付を表示させる
+				this.dateFdStart.text = strYesterDay;
+				this.dateFdEnd.text = strYesterDay;
+
+				//昨日の搬入データ取得
+				srv.getVSResult(yesterDay,yesterDay);
+			}
+
+			/**
+			 * ログインチェックの結果が返ってきたときの処理。
+			 * ログインしてない時、ログイン画面に遷移します。
+			 */
+			protected function srvUSer_resultHandle(event:ResultEvent):void
+			{
+				if(!event.result){
+					// ログインしていないので、ログイン画面に移動
+					var request:URLRequest = new URLRequest("lg_login.html");
+					navigateToURL(request, "_self");
+				}
+			}
+
+			/**
+			 * 検索実施後の処理。
+			 * 帳票出力の為の検索ワードを格納します。
+			 */
+			protected function getVSResult_resultHandle(event:ResultEvent):void
+			{
+				//CsvActionに遷移するときに渡す
+				fromDate = dateFdStart.text;
+				toDate = dateFdEnd.text;
+			}
+
+			/**
+			 * 検索ボタン押下時の処理。
+			 */
+			protected function btnSerch_clickHandler(event:MouseEvent):void
+			{
+				//検索条件の初期値として格納(何も入力されていなければ全件表示)
+				var stDate:Date = new Date(1900,1,1);
+				var enDate:Date = new Date(9999,1,1);
+
+				//入力があれば日付チェック
+				if(dateFdStart.text != ""){
+					//不備があればNullが返ってくる
+					stDate = Utils.inputTextToDate(dateFdStart.text);
+					if(stDate == null){
+						Alert.show("日付が正しくありません。",TITLE);
+						return;
+					}
+				}
+
+				//入力があれば日付チェック
+				if(dateFdEnd.text!=""){
+					enDate = Utils.inputTextToDate(dateFdEnd.text);
+
+					if(enDate == null){
+						Alert.show("日付が正しくありません。",TITLE);
+						return;
+					}
+				}
+
+				//検索対象の開始日と終了日の前後チェック
+				if(dateFdStart.text != "" && dateFdEnd.text != ""){
+
+					//falseが返ってくれば中断
+					if(!Utils.dateBeforeAfterCheck(stDate,enDate)){
+						Alert.show("開始日以降の日付を入力してください。",TITLE);
+						return;
+					}
+				}
+				//入力された検索対象期間で搬入データを取得
+				srv.getVSResult(stDate,enDate);
+			}
+
+
+			/**
+			 * 出力ボタン押下時の処理。
+			 */
+			protected function btnOutput_clickHandler(event:MouseEvent):void
+			{
+				if(ac.length == 0){
+					Alert.show("出力するリストがありません。",TITLE);
+					return;
+				}
+				//遷移先のCsvActionに検索項目を渡す
+				var vars:URLVariables = new URLVariables();
+				vars.fromDate = fromDate;
+				vars.toDate = toDate;
+				vars.fromPage = "LgResultStore"
+				// CSV出力用URLの呼び出し
+				var request:URLRequest = new URLRequest("../csv/export");
+				request.data = vars;
+				navigateToURL(request);
+			}
+
+			/**
+			 * 終了ボタン押下時の処理。
+			 */
+			private function btnExit_clickHandler(event:MouseEvent):void{
+				// 物流・組立結果選択画面に遷移する
+				var request:URLRequest = new URLRequest("lg_result_menu.html");
+				navigateToURL(request, "_self");
+			}
+
+			/**
+			 * DataGridの品番カラムに値をバインドする
+			 */
+			private function partNoColumnFunction(obj:Object, column:AdvancedDataGridColumn):String {
+				//QRコードから抜き取る
+				var itemNo:String = obj.partQrcode.toString().substring(64,76);
+				return itemNo.substring(0,5) + "-" + itemNo.substring(5,10) +
+					   "-" + itemNo.substring(10);
+			}
+
+			/**
+			 * DataGridの棚品番カラムに値をバインドする
+			 */
+			private function rackQrcodeColumnFunction(obj:Object, column:AdvancedDataGridColumn):String {
+				var rackCode:String = obj.rackQrcode.toString();
+				rackCode = rackCode.substring(0,5) + "-" + rackCode.substring(5,10) +
+					"-" + rackCode.substring(10);
+				return rackCode;
+			}
+
+			/**
+			 * DataGridの背番号カラムに値をバインドする
+			 */
+			private function backNoColumnFunction(obj:Object, column:AdvancedDataGridColumn):String {
+				//QRコードから抜き取る
+				return obj.partQrcode.toString().substring(60,64);
+			}
+
+			/**
+			 * DataGridの収容数カラムに値をバインドする
+			 */
+			private function storeNumColumnFunction(obj:Object, column:AdvancedDataGridColumn):String {
+				//QRコードから抜き取る
+				return obj.partQrcode.toString().substring(76,81);
+			}
+
+//			現状では所番地は非表示のため、コメント
+//			private function postNoColumnFunction(obj:Object, column:AdvancedDataGridColumn):String {
+//				//QRコードから抜き取る
+//				var postNo:String = obj.partQrcode.toString().substring(95,105);
+//				return postNo;
+//			}
+
+
+
+			/**
+			 * グリッドの各項目の値を適切な形にフォーマットします。
+			 */
+			protected function grid_labelFunction(obj:Object, column:AdvancedDataGridColumn):String
+			{
+				//"YYYY/MM/DD JJ:NN:SS"の形式で文字列を作成します
+				var dateFormat:DateFormatter = new DateFormatter();
+				dateFormat.formatString = "YYYY/MM/DD JJ:NN:SS"
+
+				var sr:LgVSresult = LgVSresult(obj);
+				var label:String;
+
+				switch(column.headerText) {
+					case "かんばん読込日時":
+						label = dateFormat.format(sr.partReaddate);
+						break;
+					case "棚読込日時":
+						label = dateFormat.format(sr.rackReaddate);
+						break;
+					case "棚照合結果":
+						if (sr.resultDiv == "0"){
+							label = "OK";
+						} else {
+							label = "NG";
+						}
+						break;
+				}
+				return label;
+			}
+		]]>
+
+	</fx:Script>
+
+	<fx:Declarations>
+		<s:RemoteObject id="srv" destination="lgVSresultService">
+			<s:method name="getVSResult" result="getVSResult_resultHandle(event)"/>
+		</s:RemoteObject>
+		<s:RemoteObject id="srvUser" destination="lgMUserService" result="srvUSer_resultHandle(event)"/>
+		<s:RemoteObject id="srvReport" destination="reportService" >
+			<s:method name="getreport"/>
+		</s:RemoteObject>
+		<s:ArrayCollection id="ac" list="{grid.dataProvider as IList}" />
+	</fx:Declarations>
+	<s:HGroup width="100%" height="24" verticalAlign="middle" fontFamily="ＭＳ ゴシック">
+		<s:Label text="搬入結果確認画面" fontSize="14" fontWeight="bold"/>
+	</s:HGroup>
+
+	<s:HGroup width="100%" height="24" verticalAlign="middle" fontFamily="ＭＳ ゴシック">
+		<s:Label text="かんばん読込日時" width="100" />
+		<mx:DateField id="dateFdStart" width="140" editable="true" imeMode="ALPHANUMERIC_HALF" tabIndex="1" restrict="0-9/" />
+		<s:Label  text="～" textAlign="center" width="25"/>
+		<mx:DateField id="dateFdEnd" width="140" editable="true" imeMode="ALPHANUMERIC_HALF" tabIndex="2" restrict="0-9/" />
+		<s:Button  id="btnSerch" height="30" label="検索"  click="btnSerch_clickHandler(event)" tabIndex="5"/>
+	</s:HGroup>
+
+
+
+	<mx:AdvancedDataGrid id="grid" designViewDataType="flat" width="100%" height="100%" sortExpertMode="true"
+						 dataProvider="{srv.getVSResult.lastResult}" x="1" y="87">
+		<mx:columns>
+			<mx:AdvancedDataGridColumn headerText="かんばん品番" labelFunction="partNoColumnFunction" sortable="false" width="50"/>
+			<mx:AdvancedDataGridColumn headerText="仕入先名" dataField="supplierName" sortable="false" editable="false" width="50"/>
+			<mx:AdvancedDataGridColumn headerText="背番号" labelFunction="backNoColumnFunction" sortable="false" width="35"/>
+			<mx:AdvancedDataGridColumn headerText="所番地" sortable="true" width="50" visible="false"/>
+			<mx:AdvancedDataGridColumn headerText="収容数" labelFunction="storeNumColumnFunction" sortable="false" width="30"/>
+			<mx:AdvancedDataGridColumn headerText="棚品番" dataField="rackQrcode" labelFunction="rackQrcodeColumnFunction" sortable="false" width="50"/>
+			<mx:AdvancedDataGridColumn headerText="棚照合結果" dataField="resultDiv" textAlign="center"
+									   labelFunction="grid_labelFunction" sortable="false" width="35"/>
+			<mx:AdvancedDataGridColumn headerText="搬入者" dataField="userName" width="40"/>
+			<mx:AdvancedDataGridColumn headerText="かんばん読込日時" labelFunction="grid_labelFunction" dataField="partReaddate" width="50"/>
+			<mx:AdvancedDataGridColumn headerText="棚読込日時" labelFunction="grid_labelFunction" dataField="rackReaddate" width="50"/>
+		</mx:columns>
+	</mx:AdvancedDataGrid>
+
+	<s:HGroup width="100%" height="24" verticalAlign="middle" horizontalAlign="center" fontFamily="ＭＳ ゴシック">
+		<s:Button id="btnOutput" height="30" label="出力" click="btnOutput_clickHandler(event)"/>
+		<s:Button id="btnExit" height="30" label="終了" click="btnExit_clickHandler(event)"/>
+	</s:HGroup>
+</s:Application>

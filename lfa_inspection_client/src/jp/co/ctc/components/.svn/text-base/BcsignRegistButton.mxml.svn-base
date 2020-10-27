@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!---
+	AdvancedDataGridに表示するボタンです。
+	検査項目ごとの本番登録を行います
+
+	指示マスタで使用しています。
+	詳細はソースを参照してください。
+-->
+<s:MXAdvancedDataGridItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009"
+								  xmlns:s="library://ns.adobe.com/flex/spark"
+								  xmlns:mx="library://ns.adobe.com/flex/mx"
+								  focusEnabled="true">
+	<fx:Script>
+		<![CDATA[
+			import jp.co.ctc.entity.MBcsignDTO;
+
+			import mx.controls.Alert;
+			import mx.events.CloseEvent;
+
+			/**
+			 * 検査項目の中で最初の行かどうか。
+			 * 本番登録ボタンの表示・非表示の制御に利用
+			 */
+			protected function firstRow(i:int):Boolean
+			{
+				if (i == 0)
+				{
+					return true;
+				}
+
+				var prevData:MBcsignDTO = parentDocument.acGrid.getItemAt(i - 1) as MBcsignDTO;
+				return data.itemCode != prevData.itemCode;
+			}
+
+
+			/**
+			 * 本番登録ボタン押下時の処理
+			 */
+			protected function btnBcsignRegist_clickHandler(event:MouseEvent):void
+			{
+				Alert.show("No." + data.itemCode + " " + data.itemName + " " + data.msgNo + "\nの仮マスタ本番登録を行います。\nよろしいですか？",
+					parentApplication.TITLE, Alert.OK | Alert.CANCEL, null,
+					function(event:CloseEvent):void {
+						if (event.detail == Alert.OK) {
+							parentDocument.masterRegist(data);
+						}
+					}
+				);
+			}
+
+		]]>
+	</fx:Script>
+	<s:Button id="btnBcsignRegist" label="本番登録" horizontalCenter="0"
+			  visible="{firstRow(itemIndex)}"
+			  enabled="{parentApplication.selectMst == 0}"
+			  click="btnBcsignRegist_clickHandler(event)" />
+</s:MXAdvancedDataGridItemRenderer>

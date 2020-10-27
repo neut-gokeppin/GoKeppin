@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE components PUBLIC "-//SEASAR//DTD S2Container 2.4//EN"
+	"http://www.seasar.org/dtd/components24.dtd">
+<components>
+	<include path="convention.dicon" />
+	<include path="aop.dicon" />
+	<include path="j2ee.dicon" />
+	<include path="s2jdbc.dicon" />
+
+	<component name="actionMessagesThrowsInterceptor" class="org.seasar.struts.interceptor.ActionMessagesThrowsInterceptor" />
+
+	<component name="fBcdataService" class="jp.co.ctc.service.FBcdataService">
+		<initMethod name="importStart">
+			<arg>"C:\\ALC_RECV_DEV\\"</arg>
+			<arg>false</arg>
+		</initMethod>
+	</component>
+
+	<!-- 予約処理 -->
+	<component name="mstRegistService" class="jp.co.ctc.service.MstRegistService">
+		<initMethod name="importStart">
+			<arg>false</arg>
+		</initMethod>
+	</component>
+
+	<!-- 検査結果履歴画面 -->
+	<component name="inspectCsvFile" class="java.lang.String">
+		<arg>"検査結果履歴_YYYYMMDDHHMMSS.csv"</arg>
+	</component>
+	<component name="inspectCsvFileZeroHD" class="java.lang.String">
+		<arg>"[件数ゼロ]_"</arg>
+	</component>
+	<component name="inspectCsvFileOverHD" class="java.lang.String">
+		<arg>"[件数OVER]_"</arg>
+	</component>
+	<component name="inspectMax" class="java.lang.Integer">
+		<arg>1000</arg>
+	</component>
+
+	<component name="excelPassword" class="java.lang.String">
+		<arg>""</arg>
+	</component>
+	<component name="excelSheetName" class="java.lang.String">
+		<arg>"リスト"</arg>
+	</component>
+
+	<!-- 検査データ有効日数 -->
+	<component name="inspectionExpireDays" class="java.lang.Integer">
+		<arg>30</arg>
+	</component>
+	<!-- パスワード期限切れ警告日数 -->
+	<component name="passwordExpireWarnDays" class="java.lang.Integer">
+		<arg>20</arg>
+	</component>
+	<!-- パスワード有効日数 -->
+	<component name="passwordExpireDays" class="java.lang.Integer">
+		<arg>365</arg>
+	</component>
+	<!-- 予約処理監視時間 -->
+	<component name="reserveMonitoring" class="java.lang.Integer">
+		<arg>60</arg>
+	</component>
+	<!-- 予約処理異常メール送信スクリプトファイル -->
+	<component name="reserveErrorNotifyMail" class="java.lang.String">
+		<arg>"notify_mail2.vbs"</arg>
+	</component>
+	<!-- マスタ未登録メール送信スクリプトファイル -->
+	<component name="bcdataMasterUnregisteredNotifyMail" class="java.lang.String">
+		<arg>"notify_mail_unreg.vbs"</arg>
+	</component>
+	<!-- BCデータ取込異常メール送信スクリプトファイル -->
+	<component name="bcdataAcquisitionErrorNotifyMail" class="java.lang.String">
+		<arg>"notify_mail.vbs"</arg>
+	</component>
+	<!-- 画像一覧テンプレートファイル -->
+	<component name="imageListTemplateFile" class="java.lang.String">
+		<arg>"画像一覧_template.xlsx"</arg>
+	</component>
+	<!-- 画像一覧デフォルトファイル -->
+	<component name="imageListDefaultFile" class="java.lang.String">
+		<arg>"画像一覧_YYYYMMDDHHMMSS.xlsx"</arg>
+	</component>
+	<!-- 画像一覧左Hデフォルトシート -->
+	<component name="imageListLeftDefaultSheet" class="java.lang.String">
+		<arg>"左H"</arg>
+	</component>
+	<!-- 画像一覧右Hデフォルトシート -->
+	<component name="imageListRightDefaultSheet" class="java.lang.String">
+		<arg>"右H"</arg>
+	</component>
+
+	<!-- クロスチェック -->
+	<!--
+		田原
+		<arg>"LIQ63L,LIQ64L,LIQ83L,LIQ84L"</arg>
+		<arg>1</arg>
+		<arg>"S1A%,S1B%,S1C%,S2A%,S2B%,S2C%"</arg>
+		<arg>"RCR"</arg>
+		<arg>"1, 0"</arg>
+
+		高岡
+		<arg>"LIQ_A0"</arg>
+		<arg>2</arg>
+		<arg>"S1A%,S1Z%,S2A%,S2Z%"</arg>
+		<arg>"QC0"</arg>
+		<arg>"1, 2, 4, 3"</arg>
+
+		田原
+		<arg>"LI1Q1L,LI1Q2L,LI1Q3L,LI1Q4L,LI1QBL,LI5Q7L,LI5Q8L,LI5Q9L,LI5QAL,LI5QBL,LI5QCL,LI5QDL"</arg>
+		<arg>1</arg>
+		<arg>"S1A%,S2A%"</arg>
+		<arg>"QI1,QI5"</arg>
+		<arg>"1, 0"</arg>
+
+		元町
+		<arg>"LIQ100"</arg>
+		<arg>2</arg>
+		<arg>"S1A___,S1Z___,S2A___,S2Z___"</arg>
+		<arg>"1QC"</arg>
+		<arg>"1, 2, 4, 3"</arg>
+	 -->
+	<!-- ALC論理端末名 -->
+	<component name="ltname" class="java.lang.String">
+		<arg>"LIQ100"</arg>
+	</component>
+	<!-- 1スペック情報を構成する行数 -->
+	<component name="numberOfLines" class="java.lang.Integer">
+		<arg>2</arg>
+	</component>
+	<!-- フィールド名 -->
+	<component name="fieldName" class="java.lang.String">
+		<arg>"S1A___,S1Z___,S2A___,S2Z___"</arg>
+	</component>
+	<!-- ユーザグループコード -->
+	<component name="userGroupCode" class="java.lang.String">
+		<arg>"1QC"</arg>
+	</component>
+	<!-- 桁位置、桁数 -->
+	<component name="useFieldName" class="java.lang.String">
+		<arg>"1, 2, 4, 3"</arg>
+	</component>
+
+	<!-- 本番マスタ差異削除表示件数 -->
+	<component name="differenceDetailCount" class="java.lang.Integer">
+		<arg>5</arg>
+	</component>
+	<!-- 本番予約日時デフォルト日数 -->
+	<component name="reservationDateDefaultDays" class="java.lang.Integer">
+		<arg>1</arg>
+	</component>
+	<!-- 本番予約日時デフォルト時 -->
+	<component name="ReservationDateDefaultHour" class="java.lang.Integer">
+		<arg>0</arg>
+	</component>
+	<!-- 本番予約日時デフォルト分 -->
+	<component name="ReservationDateDefaultMinute" class="java.lang.Integer">
+		<arg>0</arg>
+	</component>
+	<!-- 本番予約日時指定可能日数 -->
+	<component name="reservationDatePossibleDays" class="java.lang.Integer">
+		<arg>60</arg>
+	</component>
+	<!-- 本番登録ライン入力有無 -->
+	<component name="lineInputExistence" class="java.lang.Boolean">
+		<arg>false</arg>
+	</component>
+	<!-- 画像表示ボタン背景色 -->
+	<component name="imageButtonDisplayColor" class="java.lang.Integer">
+		<arg>0x008000</arg>
+	</component>
+	<!-- 本番マスタ差異表示背景色 -->
+	<component name="differenceDisplayColor" class="java.lang.Integer">
+		<arg>0x9ACD32</arg>
+	</component>
+	<!-- 受信失敗フォルダ -->
+	<component name="RecvErrorFolder" class="java.lang.String">
+		<arg>"ErrData"</arg>
+	</component>
+	<!-- 警告文字色 -->
+	<component name="warningColor" class="java.lang.Integer">
+		<arg>0xFF0000</arg>
+	</component>
+	<!-- 予約完了文字色 -->
+	<component name="reservationCompletion" class="java.lang.Integer">
+		<arg>0x0000FF</arg>
+	</component>
+
+</components>

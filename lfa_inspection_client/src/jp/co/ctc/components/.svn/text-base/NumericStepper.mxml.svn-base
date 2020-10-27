@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!---
+	AdvancedDataGridにて汎用的に利用できるNumericStepperです。
+	・1-10までの入力制限有り。
+	・本番マスタ選択時には編集不可。
+	・MItemクラス、LgMPartクラスを表示させるグリッドに配置可能です。
+
+	詳細はソースを参照してください。
+
+-->
+<s:MXAdvancedDataGridItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009"
+								  xmlns:s="library://ns.adobe.com/flex/spark"
+								  xmlns:mx="library://ns.adobe.com/flex/mx"
+								  focusEnabled="true"
+								  dataChange="mxadvanceddatagriditemrenderer_dataChangeHandler(event)"
+								  creationComplete="mxadvanceddatagriditemrenderer1_creationCompleteHandler(event)">
+	<fx:Script>
+		<![CDATA[
+			import jp.co.ctc.entity.LgMPart;
+			import jp.co.ctc.entity.MItem;
+			import jp.co.ctc.event.MstSelectEvent;
+			import jp.co.ctc.util.MUserUtils;
+
+			import mx.controls.advancedDataGridClasses.AdvancedDataGridListData;
+			import mx.events.FlexEvent;
+			import mx.events.NumericStepperEvent;
+
+			/**
+			 * コンポーネントが生成されたときの処理
+			 */
+			protected function mxadvanceddatagriditemrenderer1_creationCompleteHandler(event:FlexEvent):void
+			{
+				// 親画面によって、数値の入力範囲を変える
+				if (parentApplication is item_mainte || parentApplication is lg_part_mainte)
+				{
+					numStep.maximum = 99;
+					numStep.minimum = 1;
+				}
+				else if (parentApplication is bcsign_mainte)
+				{
+					numStep.maximum = 99;
+					numStep.minimum = 0;
+				}
+			}
+
+
+			/**
+			 * グリッドデータが変更されたときの処理
+			 */
+			protected function mxadvanceddatagriditemrenderer_dataChangeHandler(event:FlexEvent):void
+			{
+				if (listData==null) {
+					return;
+				}
+
+				if(numStep.value != parseInt(listData.label)){
+					numStep.value = parseInt(listData.label);
+				}
+				// 本番マスタ選択時は選択不可
+				// 2016/02/24 DA upd start
+				if (MstSelectEvent.isReal(parentApplication.selectMst)) {
+				//if(parentApplication.selectMst==1){
+				// 2016/02/24 DA upd end
+					numStep.enabled = false;
+					return;
+				}
+				
+				//ユーザー権限チェック
+				if(parentApplication.hasOwnProperty("loginUserInfo") && MUserUtils.isAdministrator(parentApplication.loginUserInfo) == false) {						
+					numStep.enabled = false;
+					return;
+				}
+				
+				// 2016/02/24 DA ins start
+				// 車種の予約フラグが予約の時
+				if (parentApplication.hasOwnProperty("isReservedMVehicle") && parentApplication.isReservedMVehicle == true) {
+					numStep.enabled = false;
+					return;
+				}
+
+				if (parentApplication.hasOwnProperty("isItemMainte") && parentApplication.isItemMainte == true) {
+					var mItem:MItem = this.data as MItem;
+					if (mItem.checkReserveFlag()){
+//						this.enabled = false;
+						numStep.enabled = false;
+					}
+					else {
+//						this.enabled = true;
+						numStep.enabled = true;
+					}
+				}
+				// 2016/02/24 DA ins end
+			}
+
+
+			/**
+			 * 数字が変更されたときの処理
+			 */
+			protected function numStep_changeHandler(event:NumericStepperEvent):void
+			{
+				if (listData == null) {
+					return;
+				}
+
+				var ld:AdvancedDataGridListData = AdvancedDataGridListData(listData);
+				var field:String = ld.dataField;
+
+				// 変更があった行を選択する
+				for( var loop_cnt:int=0;loop_cnt< parentApplication.acGrid.length;loop_cnt++){
+
+					// 検査項目マスタメンテ
+					if (ld.item is MItem){
+						if( (parentApplication.acGrid[loop_cnt] as MItem).itemCode == (data as MItem).itemCode){
+							parentApplication.grid.selectedIndex = loop_cnt;
+							break;
+						}
+					// 部品マスタメンテ
+					} else if(ld.item is LgMPart){
+						if( (parentApplication.acGrid[loop_cnt] as LgMPart).partCode == (data as LgMPart).partCode){
+							parentApplication.grid.selectedIndex = loop_cnt;
+							break;
+						}
+					}
+				}
+
+				// 変更があれば値を格納
+				if (ld.item[field] != numStep.value) {
+					ld.item[field] = numStep.value;
+				}
+			}
+		]]>
+	</fx:Script>
+	<mx:NumericStepper id="numStep" change="numStep_changeHandler(event)" width="100%"/>
+</s:MXAdvancedDataGridItemRenderer>

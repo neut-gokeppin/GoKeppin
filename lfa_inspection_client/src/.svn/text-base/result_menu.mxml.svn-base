@@ -1,0 +1,323 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:mx="library://ns.adobe.com/flex/mx" pageTitle="LFA仕様検査システム"
+			   creationComplete="application1_creationCompleteHandler(event)">
+	<s:layout>
+		<s:VerticalLayout paddingLeft="8" paddingRight="8" paddingTop="8" paddingBottom="8" horizontalAlign="center" gap="8"/>
+	</s:layout>
+	<fx:Style source="lfa_inspection.css"/>
+	<fx:Script>
+
+		<![CDATA[
+			import flash.net.navigateToURL;
+
+			import flashx.textLayout.operations.SplitParagraphOperation;
+
+			import jp.co.ctc.entity.VResult;
+			import jp.co.ctc.util.Utils;
+
+			import mx.collections.ArrayList;
+			import mx.collections.ICollectionView;
+			import mx.collections.IHierarchicalData;
+			import mx.collections.IList;
+			import mx.controls.Alert;
+			import mx.controls.LinkButton;
+			import mx.controls.advancedDataGridClasses.AdvancedDataGridItemRenderer;
+			import mx.effects.Pause;
+			import mx.events.AdvancedDataGridEvent;
+			import mx.events.CloseEvent;
+			import mx.events.CollectionEvent;
+			import mx.events.CollectionEventKind;
+			import mx.events.FlexEvent;
+			import mx.events.ListEvent;
+			import mx.events.PropertyChangeEvent;
+			import mx.formatters.DateFormatter;
+			import mx.managers.CursorManager;
+			import mx.rpc.events.ResultEvent;
+			// ファイル出力用
+			private var fileReference:FileReference;
+			private var TITLE:String = "検査結果確認画面";
+
+
+			/**
+			 * アプリケーション初期化
+			 * ・ログインチェック
+			 * ・検査結果全件取得
+			 */
+			protected function application1_creationCompleteHandler(event:FlexEvent):void
+			{
+				//ログインチェック
+				srvUser.isLogin();
+				Alert.buttonWidth = 100;
+
+				//全件データ取得
+				srv.getVResultByKeys();
+
+				// ボデーNo入力欄にフォーカスする
+				this.bodyNo.setFocus();
+				// IMEをオフ
+				IME.enabled = false;
+			}
+
+			/**
+			 * ログインチェック後の処理。
+			 */
+			protected function srvUSer_resultHandle(event:ResultEvent):void
+			{
+				if(!event.result){
+					// ログインしていないので、ログイン画面に移動
+					var request:URLRequest = new URLRequest("login.html");
+					navigateToURL(request, "_self");
+				}
+			}
+
+			/**
+			 * 検索ボタン押下時の処理。
+			 */
+			protected function btnSerch_clickHandler(event:MouseEvent):void
+			{
+				//検索条件の初期値として格納(何も入力されていなければ全件表示)
+				var BodyNo:String = bodyNo.text;
+				var GroupName:String = groupName.text
+				var stDate:Date = new Date(1900,1,1);
+				var enDate:Date = new Date(9999,1,1);
+
+				//入力があれば日付チェック
+				if(dateFdStart.text!=""){
+					//不備があればNullが返ってくる
+					stDate = Utils.inputTextToDate(dateFdStart.text);
+
+					if(stDate == null){
+						Alert.show("日付が正しくありません。",TITLE);
+						return;
+					}
+				}
+
+				if(dateFdEnd.text!=""){
+					//不備があればNullが返ってくる
+					enDate = Utils.inputTextToDate(dateFdEnd.text)
+
+					if(enDate==null){
+						Alert.show("日付が正しくありません。",TITLE);
+						return;
+					}
+
+					//正しい入力値ならば時間を加える
+					enDate=new Date(enDate.getFullYear(),enDate.getMonth(),enDate.getDate(),23,59,59);
+				}
+
+				//検索対象の開始日と終了日の前後チェック
+				if(dateFdStart.text != "" && dateFdEnd.text != ""){
+
+					//falseが返ってくれば中断
+					if(!Utils.dateBeforeAfterCheck(stDate,enDate)){
+						Alert.show("開始日以降の日付を入力してください。",TITLE);
+						return;
+					}
+
+				}
+
+				//ボデーNoチェック
+				if(bodyNo.text != ""){
+					if(!BodyNo_InputCheck(bodyNo.text)){
+						return;
+					}
+				}
+
+				//「エラーありのみ」のチェックボックス分岐
+				if(chError.selected){
+					srv.getVResultByKeys(BodyNo,GroupName,stDate,enDate,1);
+				}
+				else{
+					srv.getVResultByKeys(BodyNo,GroupName,stDate,enDate);
+				}
+
+			}
+
+			/**
+			 * ボデーNo入力チェック。
+			 * @return true:チェックOK　false:チェックNG
+			 */
+			public function BodyNo_InputCheck(BodyNo:String):Boolean
+			{
+				for (var i:int=0;i<BodyNo.length;i++) {
+					var char_teamCode:String = BodyNo.charAt(i)
+					if(char_teamCode.match(/[0-9A-Za-z]/) == null){
+						Alert.show("ボデーNo.は半角英数字以外は無効です。",TITLE);
+						return false;
+					}
+				}
+				return true;
+			}
+
+			/**
+			 * グリッドのセルダブルクリック時の処理。
+			 */
+			protected function grid_doubleClickHandler(event:MouseEvent):void
+			{
+				//項目名の行を選択したとき
+				if(grid.selectedIndex==-1){
+					return;
+				}
+
+				//選択した行の必要な値を変数に格納
+				var bodyNo:String = grid.selectedItem.bodyNo;
+				var groupCode:String = grid.selectedItem.groupCode;
+				var recvDay:String = grid.selectedItem.recvDay;
+
+				//遷移先の「serchKeys」に値を渡す
+				var vars:URLVariables = new URLVariables();
+				vars.serchKeys = bodyNo +"," + groupCode + "," + recvDay + "\r\n";
+
+				// 帳票出力用URLの呼び出し
+				var request:URLRequest = new URLRequest("../report/getreport");
+				request.data = vars;
+				navigateToURL(request);
+			}
+
+			/**
+			 * 出力ボタン押下時の処理。
+			 */
+			protected function btnOutput_clickHandler(event:MouseEvent):void
+			{
+
+				//すべての検索ワードを格納用
+				var allKeys:String = "";
+				var selectRow:Array = grid.selectedItems;
+
+				//行が未選択
+				if(selectRow.length==0){
+					Alert.show("出力する行を選択してください",TITLE);
+						return;
+				}
+
+				// 行数分の各値を格納していく
+				// グリッドの下から値を取得していくので逆に取得する
+				for(var i:int=selectRow.length - 1 ; i >= 0 ; i--){
+					var rs:VResult = selectRow[i] as VResult;
+					allKeys += rs.bodyNo + ",";
+					allKeys += rs.groupCode + ",";
+					allKeys += rs.recvDay +"\r\n";
+				}
+
+				//遷移先の「serchKeys」に値を渡す
+				var vars:URLVariables = new URLVariables();
+				vars.serchKeys = allKeys;
+				vars.fromPage = "ResultMenu";
+
+				// 帳票出力用URLの呼び出し
+				var request:URLRequest = new URLRequest("../report/getreport");
+				request.method = URLRequestMethod.POST;
+				request.data = vars;
+				navigateToURL(request);
+			}
+			/**
+			 * 終了ボタン押下時の処理。
+			 */
+			private function btnExit_clickHandler(event:MouseEvent):void{
+				// 機能選択画面に遷移する
+				var request:URLRequest = new URLRequest("function_menu.html");
+				navigateToURL(request, "_self");
+			}
+
+			/**
+			 * グリッドの各項目の値を適切な形にフォーマットします。
+			 */
+			protected function grid_labelFunction(obj:Object, column:AdvancedDataGridColumn):String
+			{
+				var dateFormat:DateFormatter = new DateFormatter();
+				dateFormat.formatString = "YYYY/MM/DD"
+
+				var rs:VResult = VResult(obj);
+
+				var label:String;
+
+				switch(column.headerText) {
+					case "NGあり":
+
+						if(rs.inspecResult==1){
+							label ="■";
+						}
+						else{
+							label ="□";
+						}
+						break;
+					case "検査実施日":
+						// そのままではうまく変換しないため、
+						// Date型の変数を作成する。
+						var date:Date = new Date(rs.inspecDate);
+
+						// "YYYY/MM/DD"の形式で出力
+						label=dateFormat.format(date);
+						break;
+					case "検査実施者":
+
+						// -------検査実施者がいないとき(本来は必要ないはず)
+						if (rs.mUser==null){
+							label = "";
+							break;
+						}
+						//-----------------------------------------ここまで
+
+						label = rs.mUser.userName;
+						break;
+				}
+				return label;
+			}
+
+		]]>
+
+	</fx:Script>
+
+	<fx:Declarations>
+		<s:RemoteObject id="srv" destination="VResultService">
+			<s:method name="getVResultByKeys"/>
+		</s:RemoteObject>
+		<s:RemoteObject id="srvUser" destination="MUserService" result="srvUSer_resultHandle(event)"/>
+		<s:RemoteObject id="srvReport" destination="reportService" >
+			<s:method name="getreport"/>
+		</s:RemoteObject>
+	</fx:Declarations>
+	<s:HGroup width="100%" height="24" verticalAlign="middle">
+		<s:Label text="検査結果確認画面" fontSize="14" fontWeight="bold"/>
+	</s:HGroup>
+	<s:HGroup width="100%" height="24" verticalAlign="middle">
+		<s:Label text="ボデーNO" width="125" height="25"/>
+		<s:TextInput id="bodyNo" maxChars="5" tabIndex="0"/>
+		<s:Label text=" " width="25" height="15"/>
+		<s:CheckBox id="chError" label="NGありのみ" tabIndex="4" width="140"/>
+		<s:Button  id="btnSerch" label="検索"  click="btnSerch_clickHandler(event)" tabIndex="5"/>
+	</s:HGroup>
+	<s:HGroup width="100%" height="24" verticalAlign="middle">
+		<s:Label text="検査実施日" width="125" height="25"/>
+		<mx:DateField id="dateFdStart" width="140" editable="true" tabIndex="1" restrict="0-9/" />
+		<s:Label text="～" width="25" height="15"/>
+		<mx:DateField id="dateFdEnd" width="140" editable="true" tabIndex="2" restrict="0-9/" />
+	</s:HGroup>
+	<s:HGroup width="100%" height="24" verticalAlign="middle">
+		<s:Label text="グループ名" width="125" height="25"/>
+		<s:TextInput id="groupName" maxChars="30" tabIndex="3"/>
+	</s:HGroup>
+
+
+	<mx:AdvancedDataGrid id="grid" designViewDataType="flat" width="100%" height="100%" sortExpertMode="true"
+						 dataProvider="{srv.getVResultByKeys.lastResult}" doubleClickEnabled="true" doubleClick="grid_doubleClickHandler(event)" selectionMode="multipleRows">
+		<mx:columns>
+			<mx:AdvancedDataGridColumn headerText="ボデーNo" dataField="bodyNo" sortable="true" width="50"/>
+			<mx:AdvancedDataGridColumn headerText="グループ名" dataField="groupName" sortable="true" width="50"/>
+			<mx:AdvancedDataGridColumn headerText="NGあり" textAlign="center" labelFunction="grid_labelFunction" sortable="false" editable="false" width="50"/>
+			<mx:AdvancedDataGridColumn headerText="検査実施日" dataField="inspecDate" labelFunction="grid_labelFunction" sortable="false" width="50"/>
+			<mx:AdvancedDataGridColumn headerText="検査実施者" labelFunction="grid_labelFunction" sortable="true" width="50"/>
+
+			<mx:AdvancedDataGridColumn headerText="受信日" dataField="recvDay" visible="false" width="50"/>
+			<mx:AdvancedDataGridColumn headerText="コード" dataField="groupCode" visible="false" width="50"/>
+		</mx:columns>
+	</mx:AdvancedDataGrid>
+
+	<s:HGroup width="100%" height="24" verticalAlign="middle" horizontalAlign="center">
+		<s:Button id="btnOutput" height="30" label="出力" click="btnOutput_clickHandler(event)"/>
+		<s:Button id="btnExit" height="30" label="終了" click="btnExit_clickHandler(event)"/>
+	</s:HGroup>
+
+</s:Application>

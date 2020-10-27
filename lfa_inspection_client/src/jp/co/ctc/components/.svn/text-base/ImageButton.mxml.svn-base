@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!---
+	AdvancedDataGridにて汎用的に利用できるボタンです。
+	・画像を登録する際に用います
+	・JPEG形式の画像ファイルを選択するダイアログが表示されます。
+	・ファイル選択時にデータの更新を察知します。
+
+	検査・物流システムの各指示マスタで使用しています。
+	詳細はソースを参照してください。
+-->
+<s:MXAdvancedDataGridItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009"
+								  xmlns:s="library://ns.adobe.com/flex/spark"
+								  xmlns:mx="library://ns.adobe.com/flex/mx"
+								  dataChange="imageButton_dataChangeHandler(event)"
+								  focusEnabled="true">
+	<fx:Script>
+		<![CDATA[
+			import mx.controls.ColorPicker;
+			import mx.controls.advancedDataGridClasses.AdvancedDataGridItemRenderer;
+			import mx.events.ColorPickerEvent;
+			import mx.events.FlexEvent;
+			import mx.resources.IResourceManager;
+			import mx.resources.ResourceManager;
+			import jp.co.ctc.entity.MBcsignDTO;
+			import jp.co.ctc.event.MstSelectEvent;
+			import jp.co.ctc.util.MUserUtils;
+
+			private var fileReference:FileReference;
+
+			/**
+			 * 画像選択ボタンを押したときの処理。
+			 * ファイル選択ダイアログを表示する
+			 */
+			protected function btnSelectImage_clickHandler(event:MouseEvent):void
+			{
+				fileReference = new FileReference();
+				fileReference.addEventListener(Event.SELECT, fileReference_selectHandler);
+				var imagesFilter:FileFilter = new FileFilter("画像ファイル (*.jpg)", "*.jpg");
+				fileReference.browse([imagesFilter]);
+			}
+
+			/**
+			 * ファイル選択時の処理。
+			 */
+			protected function fileReference_selectHandler(event:Event):void
+			{
+				// 2014/04/07 DA ins start
+				data.imgDel = null;
+				// 2014/04/07 DA ins end
+				if (data.editDiv != "I")
+				{
+					data.editDiv = "U";
+				}
+				data.fileReference = event.currentTarget;
+			}
+
+			// 2016/02/24 DA ins start 
+			/*
+			* ファイルの値が違う場合、背景色を変更する
+			*/
+			protected function imageButton_dataChangeHandler(event:FlexEvent):void {
+
+				if (listData==null) {
+					return;
+				}
+				
+				if (data==null) {
+					return;
+				}
+				
+				if (parentApplication.hasOwnProperty("isBcsignMainte") && parentApplication.isBcsignMainte == true) {
+					var mBcsignDTO:MBcsignDTO = this.data as MBcsignDTO;
+					if (mBcsignDTO.reserveFlag == "1" || mBcsignDTO.reserveFlag == "2"　|| mBcsignDTO.sopDeleteFlag == "1"){
+//						this.enabled = false;
+						btnSelectImage.enabled = false;
+					}
+					else {
+//						this.enabled = true;
+						btnSelectImage.enabled = true;
+				}
+				}
+
+				if (data != null && data.fileNameUnMat != null && data.fileNameUnMat == "true") {
+					//背景色の色を設定する
+					hbox.setStyle("background", true);
+					hbox.setStyle("backgroundColor", resourceManager.getInt('resource','differenceDisplayColor'));
+					
+				} else if (data != null && data.sopDeleteFlag == "1") {
+					hbox.setStyle("background", true);
+					hbox.setStyle("backgroundColor", resourceManager.getInt('resource','bcsignSopDeleteColor'));
+
+				} else if (data != null && data.editDiv != null && data.editDiv != "M") {
+					// 変更区分がnull、"M"(移動)でなければ背景を赤色
+					hbox.setStyle("background", true);
+					hbox.setStyle("backgroundColor", 0xFFB6C1);
+				} else {
+					//背景色の色を設定しない
+					hbox.setStyle("background", true);
+					hbox.setStyle("backgroundColor", 0xFFFFFF);
+
+				}
+
+				// selectMstが存在する画面で、本番マスタ選択時は編集不可
+				if(parentApplication.hasOwnProperty("selectMst") && MstSelectEvent.isReal(parentApplication.selectMst)) {						
+					btnSelectImage.enabled = false;
+					return;
+				}
+
+				//ユーザー権限チェック
+				if(parentApplication.hasOwnProperty("loginUserInfo") && MUserUtils.isAdministrator(parentApplication.loginUserInfo) == false) {						
+					btnSelectImage.enabled = false;
+					return;
+				}
+
+				// 車種の予約フラグが予約の時
+				if (parentApplication.hasOwnProperty("isReservedMVehicle") && parentApplication.isReservedMVehicle == true) {
+					btnSelectImage.enabled = false;
+					return;
+				}
+
+			}
+			// 2016/02/24 DA ins end 
+		
+		]]>
+	</fx:Script>
+	<mx:HBox id="hbox" width="100%" height="100%" 
+			 horizontalAlign="center">
+		<!-- 2016/02/24 DA upd start -->
+		<!--
+		<s:Button id="btnSelectImage" width="40" label="＋" 
+				  click="btnSelectImage_clickHandler(event)"
+				  enabled="{parentApplication.selectMst == 0}"
+				  />
+		-->
+		<s:Button id="btnSelectImage" width="40" label="＋" 
+				  click="btnSelectImage_clickHandler(event)"
+				  enabled="{MstSelectEvent.isTemporary(parentApplication.selectMst)}"
+				  />
+		<!-- 2016/02/24 DA upd end -->
+	</mx:HBox>
+
+</s:MXAdvancedDataGridItemRenderer>

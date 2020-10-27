@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:mx="library://ns.adobe.com/flex/mx" pageTitle="LFA物流・組立 部品棚管理システム"
+			   creationComplete="application1_creationCompleteHandler(event)">
+	<s:layout>
+		<s:HorizontalLayout paddingLeft="8" paddingRight="8" paddingTop="8" paddingBottom="8" horizontalAlign="center" gap="8"/>
+	</s:layout>
+	<fx:Style source="lfa_inspection.css"/>
+
+	<fx:Script>
+		<![CDATA[
+			import mx.controls.Alert;
+			import mx.core.FlexGlobals;
+			import mx.events.FlexEvent;
+			import mx.managers.FocusManager;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			import mx.utils.StringUtil;
+			private var TITLE:String = "LFA物流・組立 部品棚管理システム"
+
+			/**
+			 * 画面起動時の処理
+			 */
+			protected function application1_creationCompleteHandler(event:FlexEvent):void
+			{
+				// 従業員コード入力欄をフォーカスする
+				this.txtCode.setFocus();
+				// IMEをオフ
+				IME.enabled = false;
+			}
+
+			/**
+			 * ログインボタン押下時の処理。
+			 * ログインチェックを行います。
+			 */
+			protected function button1_clickHandler(event:Event):void
+			{
+				// ログイン処理
+				srv.login(StringUtil.trim(txtCode.text).toUpperCase(), txtPass.text);
+			}
+
+
+			/**
+			 * ログインチェック完了後の処理。
+			 * 成功時に機能選択画面に繊維します。
+			 */
+			protected function srv_resultHandler(event:ResultEvent):void
+			{
+				if (event.result) {
+					// ログイン成功。
+					// 機能選択画面に遷移する
+					var request:URLRequest = new URLRequest("lg_function_menu.html");
+					navigateToURL(request, "_self");
+				} else {
+					// ログイン失敗
+					//Alert.show("従業員コードが違います。",TITLE);
+					Alert.show("従業員コードまたはパスワードが違います。",TITLE);
+				}
+			}
+
+			/**
+			 * 従業員コード入力欄でEnterキー押下時の処理
+			 */
+			protected function txtCode_enterHandler(event:FlexEvent):void
+			{
+				// ログインボタンを押したことにする
+				button1_clickHandler(event);
+			}
+
+			/**
+			 * テキストフィールドにフォーカスが当たったときの処理
+			 */
+			protected function txtCode_focusInHandler(event:FocusEvent):void
+			{
+				// IMEをオフ。
+				// FlashPlayerのバージョンによっては、
+				// 勝手にIMEがオンになってしまうことがあるため。
+				IME.enabled = false;
+			}
+
+		]]>
+	</fx:Script>
+
+	<fx:Declarations>
+		<s:RemoteObject id="srv" destination="lgMUserService" result="srv_resultHandler(event)" />
+	</fx:Declarations>
+	<s:VGroup width="100%" height="100%"  fontFamily="ＭＳ ゴシック" verticalAlign="middle" horizontalAlign="center" >
+		<s:Label text="LFA物流・組立 部品棚管理システム&#xd;" width="537" height="77" fontSize="32" verticalAlign="middle" textAlign="center" textDecoration="none"/>
+		<!---<s:HGroup width="100%" height="100" verticalAlign="middle" horizontalAlign="center">
+			<s:Label text="従業員コード" fontSize="24" height="32" verticalAlign="middle"/>
+			<s:TextInput id="txtCode" width="216" height="32" fontSize="17" enter="txtCode_enterHandler(event)"/>
+			<s:Button label="ログイン" width="108" height="32" fontSize="16" click="button1_clickHandler(event)"/>
+		</s:HGroup> -->
+		<s:HGroup width="100%" height="50" verticalAlign="middle" horizontalAlign="center">
+			<s:Label text="従業員コード" fontSize="24" width="150" height="32" verticalAlign="middle"/>
+			<s:TextInput id="txtCode" width="216" height="32" fontSize="17" enter="txtCode_enterHandler(event)" focusIn="txtCode_focusInHandler(event)" />
+		</s:HGroup>
+		<s:HGroup width="100%" height="50" verticalAlign="middle" horizontalAlign="center">
+			<s:Label text="パスワード" fontSize="24" width="150" height="32" verticalAlign="middle"/>
+			<s:TextInput displayAsPassword="true" id="txtPass" width="216" height="32" fontSize="17" enter="txtCode_enterHandler(event)" focusIn="txtCode_focusInHandler(event)" />
+		</s:HGroup>
+		<s:Button label="ログイン" width="108" height="32" fontSize="16" click="button1_clickHandler(event)"/>
+	</s:VGroup>
+</s:Application>

@@ -1,0 +1,1113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!---
+ITAGE JYO 2013-04-15
+-->
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:mx="library://ns.adobe.com/flex/mx"
+			   pageTitle="誤欠品検出力向上ツール - 仮マスタ本番登録"
+			   xmlns:components="jp.co.ctc.components.*"  minWidth="820"
+			   creationComplete="application1_creationCompleteHandler(event)" >
+	<s:layout>
+		<s:VerticalLayout paddingLeft="8" paddingRight="8" paddingTop="8" paddingBottom="8" horizontalAlign="center" gap="8"/>
+	</s:layout>
+
+	<fx:Style source="lfa_inspection.css"/>
+	<fx:Script>
+		<![CDATA[
+			import jp.co.ctc.components.CheckBox;
+			import jp.co.ctc.components.RegistReserveDate;
+			import jp.co.ctc.entity.MUser;
+			import jp.co.ctc.entity.MVehicle;
+			import jp.co.ctc.event.MasterRegistEvent;
+			import jp.co.ctc.event.MstSelectEvent;
+			import jp.co.ctc.util.MUserUtils;
+			import jp.co.ctc.util.Utils;
+			
+			import mx.collections.ArrayCollection;
+			import mx.controls.Alert;
+			import mx.events.CloseEvent;
+			import mx.events.FlexEvent;
+			import mx.events.ListEvent;
+			import mx.events.ScrollEvent;
+			import mx.formatters.DateFormatter;
+			import mx.managers.CursorManager;
+			import mx.managers.PopUpManager;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			import mx.utils.StringUtil;
+			
+			/**
+			 * 画面名
+			 */
+			public var TITLE:String = "仮マスタ本番登録";
+
+			/**
+			 * 仮マスタ、本番マスタの区分
+			 */
+			public var selectMst:int = 0;
+			/**
+			 * 従業員コード
+			 */
+			public var loginUser:String = "dummy";
+
+			/**
+			 * チェックボックスは編集不可のフラグである
+			 */
+			public var isMasterRegist :Boolean = true;
+
+			/**
+			 * グリッドのデータ
+			 */
+			[Bindable]
+			public var gridData:ArrayCollection;
+
+			/**
+			 * データチェックのとき、選択され行数
+			 */
+			private var gridRowIndex:int = -1;
+
+			/**
+			 * データチェックのとき、選択された行データ
+			 */
+			private var gridRowData:Object;
+
+			/**
+			 * 本番登録時の登録種別
+			 */
+			private var registType:String;
+
+			/**
+			 * 予約、予約の解除のとき、グリッドデータの取得のフラッグ
+			 */
+			private var isGetGridDataAfterBookOrCancel:Boolean = false;
+
+			/**
+			 * 編集有無チェックのフラッグ
+			 */
+			public var isInputTextChangedDic:Dictionary = new Dictionary( true );
+			
+			// 2016/02/24 DA ins start
+			public var gridScrollPosition:int = 0; // 表示行のインデックス
+			public var loginUserInfo:MUser; //ログインユーザ情報
+			// 2016/02/24 DA ins end
+			
+			// 2016/02/24 DA ins start
+			private var strBctype:String = "";
+			private var strBcnoH0:String = "";
+			private var strBodyNo:String = "";
+			private var strLine:String = "";
+			// 2016/02/24 DA ins end
+			// 2016/09/09 DA ins start
+			private var isRegistByNoLine:Boolean = false;
+			// 2016/09/09 DA ins end
+			
+			/**
+			 * 初期ロード時の処理。
+			 *
+			 */
+			protected function application1_creationCompleteHandler(event:FlexEvent):void
+			{
+				// Debug用 ****************************************
+				//　Debugログインさせ、ログインが行われたようにする。
+				//srvUser.login("CJ00900");
+				//srvUser.setSelectMst(-1);
+				
+				//ユーザーコードの取得
+				srvUser.getUserCode();
+
+				CursorManager.setBusyCursor();
+				this.grid.enabled = false;
+
+				// 2016/02/24 DA upd start
+//				// 予約イベント
+//				this.grid.addEventListener(MasterRegistEvent.Book,bookEventHandler);
+//				// 検査順の本番登録イベント
+//				this.grid.addEventListener(MasterRegistEvent.Procedure, bookEventHandler);
+//				// 予約の解除イベント
+//				this.grid.addEventListener(MasterRegistEvent.Cancel, cancleEventHandler);
+//				
+//				//本番へ即時登録イベント
+//				this.grid.addEventListener(MasterRegistEvent.ImmediatelyUpdate, immediatelyUpdateEventHandler);
+//				//検査順の本番へ即時登録イベント
+//				this.grid.addEventListener(MasterRegistEvent.ImmediatelyProcedure, immediatelyUpdateEventHandler);
+
+				// 全体の車種チェック
+				this.grid.addEventListener(MasterRegistEvent.CheckAll, checkTypeEventHandler);
+				// 検査順のみの車種チェック
+				this.grid.addEventListener(MasterRegistEvent.CheckInspec, checkTypeEventHandler);
+				
+				// 予約イベント
+				this.grid.addEventListener(MasterRegistEvent.Reserve, reserveEventHandler);
+				// 予約解除イベント
+				this.grid.addEventListener(MasterRegistEvent.ReserveCancel, reserveEventHandler);
+				// 2016/02/24 DA upd end
+				
+				// 編集有無チェック
+				this.grid.addEventListener(MasterRegistEvent.InputTextChanged, inputTextChangedEventHandler);
+
+				// Alertのボタンの幅を変更
+				// デフォルトの60だと"キャンセル"の文字が表示しきれない。
+				Alert.buttonWidth = 100;
+
+			}
+
+			// 2016/02/24 DA del start
+//			/**
+//			 * 切替組立連番と切替ボデーNOのどちらの入力も無い場合
+//			 * 仮マスタ本番登録処理（ストアドファンクション）を実行
+//			 *
+//			 */
+//			private function immediatelyUpdateEventHandler(event:MasterRegistEvent):void
+//			{
+//				CursorManager.setBusyCursor();
+//				this.grid.enabled = false;
+//
+//				// 車種マスタに対して、該当するデータの更新日、更新者を更新する。
+//				// 仮マスタ本番登録処理（ストアドファンクション）を実行する。
+//				// 仮マスタ本番登録処理（ストアドファンクション）のエラーが発生したら、ロールバックできるように、
+//				// updateImmediateはtempMstRegistを含めている。
+//				srvMstChange.updateImmediate(event.params, this.loginUser, getRegistType(event.type));
+//
+//				return;
+//
+//			}
+			// 2016/02/24 DA del end
+
+			/**
+			 * 編集有無チェック
+			 *
+			 */
+			private function inputTextChangedEventHandler(event:MasterRegistEvent):void
+			{
+				var rowIndex:int = event.rowIndex;
+				var params:Object = event.params;
+
+				// 2016/02/24 DA upd start
+				var bctype:String = event.params.bctype as String;
+				var bcnoH0:String = event.params.bcnoH0 as String;
+				var bodyNo:String = event.params.bodyNo as String;
+				var line:String = event.params.line as String;
+
+				// 編集無の場合は、一時保存のデータを削除する
+				if (   ( null == bcnoH0 || "" == bcnoH0 )
+					&& ( null == bodyNo || "" == bodyNo )
+					&& ( null == line || "" == line )){
+
+					if(isInputTextChangedDic.hasOwnProperty( bctype )){
+						isInputTextChangedDic[ bctype ] = undefined;
+						delete isInputTextChangedDic[ bctype ];
+					}
+
+				}
+				else
+				{
+					isInputTextChangedDic[bctype] = true;
+
+				}
+				// 2016/02/24 DA upd end
+
+				return;
+
+			}
+
+			/**
+			 * 車種マスタ一覧取得処理の結果確認
+			 *
+			 */
+			protected function onGetMVehicleMstRegist_resultHandler(event:ResultEvent):void
+			{
+				// サーバー処理の呼出が出来ませんでした
+				if (event.result==null) {
+					// 操作を受け付けるようにする
+					CursorManager.removeBusyCursor();
+					this.enabled = true;
+					grid.enabled = true;
+
+					Alert.show("サーバー処理の呼出が出来ませんでした。", TITLE);	// 要MSG確認
+				}
+				else
+				{
+
+					this.gridData = event.result as ArrayCollection;
+
+					// 2016/02/24 DA del start
+//					// いずれか切替組立連番、切替ボデーはデータがあれば、予約中の状態で、入力できないように設定する
+//					for each(var vehicle:jp.co.ctc.entity.MVehicle in this.gridData){
+//
+//						// true  => 予約中
+//						// false => 未予約
+//						if (Utils.isEmpty( vehicle.bcnoH0 ) == false
+//							|| Utils.isEmpty( vehicle.bodyNo ) == false){
+//							vehicle.bookStatus = true;
+//						}
+//						else
+//						{
+//							vehicle.bookStatus = false;
+//						}
+//
+//					}
+					// 2016/02/24 DA del end
+
+					// 取得データがありません
+					if(this.gridData.length == 0){
+						Alert.show("取得データがありません。",TITLE);	// 要MSG確認
+
+					}
+					
+					this.grid.dataProvider = this.gridData;
+					
+					// 編集有無チェックのフラッグをクリアする
+					for ( var bctype:String in isInputTextChangedDic )
+					{
+						//remove( key );
+						isInputTextChangedDic[ bctype ] = undefined;
+						delete isInputTextChangedDic[ bctype ];
+					}
+
+					// リフレッシュ
+					if (this.isGetGridDataAfterBookOrCancel == true) {
+						this.isGetGridDataAfterBookOrCancel = false;
+						//
+						var cols:Array = grid.columns;
+						grid.columns = cols;
+
+
+					}
+					
+					// 2016/02/24 DA ins start
+					// 保存する前の位置に戻す
+					this.grid.verticalScrollPosition = this.gridScrollPosition;
+					this.grid.initialize();
+					this.grid.dataProvider.refresh();
+					// 2016/02/24 DA ins start
+					
+					// 操作を受け付けるようにする
+					CursorManager.removeBusyCursor();
+					this.enabled = true;
+					grid.enabled = true;
+				}
+			}
+			
+			// 2016/02/24 DA ins start
+			/**
+			 * 全体/検査順のみボタン イベント
+			 *
+			 */
+			private function checkTypeEventHandler(event:MasterRegistEvent):void
+			{
+				this.gridRowIndex = event.rowIndex;
+				this.gridRowData = event.params;
+				this.registType = event.type;
+				
+				strBctype = event.params.bctype as String;
+				strBcnoH0 = event.params.bcnoH0 as String;
+				strBodyNo = event.params.bodyNo as String;
+				strLine = event.params.line as String;
+				
+				strBctype = strBctype == null ? "" : strBctype;
+				strBcnoH0 = strBcnoH0 == null ? "" : strBcnoH0;
+				strBodyNo = strBodyNo == null ? "" : strBodyNo;
+				strLine = strLine == null ? "" : strLine;
+
+				// 未検査車両有無チェック、サーバ側のAPIを呼び出す。
+				srvMstChange.isAllNotCheckOfBcdata(strBctype, strBcnoH0, strBodyNo, strLine);
+			}
+			
+			/**
+			 * 予約/予約解除ボタン イベント
+			 *
+			 */
+			private function reserveEventHandler(event:MasterRegistEvent):void
+			{
+				this.gridRowIndex = event.rowIndex;
+				this.gridRowData = event.params;
+				this.registType = event.type;
+				
+				strBctype = event.params.bctype as String;
+				strBcnoH0 = event.params.bcnoH0 as String;
+				strBodyNo = event.params.bodyNo as String;
+				strLine = event.params.line as String;
+				
+				strBctype = strBctype == null ? "" : strBctype;
+				strBcnoH0 = strBcnoH0 == null ? "" : strBcnoH0;
+				strBodyNo = strBodyNo == null ? "" : strBodyNo;
+				strLine = strLine == null ? "" : strLine;
+				
+				if (this.registType == MasterRegistEvent.ReserveCancel) {
+					srvMstRegist.isReservedMVehicle(selectMst, strBctype);
+				}
+				else {
+					srvMstRegist.getReserveStatus(selectMst, strBctype);
+				}
+			}
+			// 2016/02/24 DA ins end
+			
+			/**
+			 * 車種マスタ一覧取得処理の結果確認
+			 *
+			 */
+			protected function onIsAllNotCheckOfBcdata_resultHandler(event:ResultEvent):void
+			{
+				// サーバー処理の呼出が出来ませんでした
+				if (event.result==null) {
+					Alert.show("サーバー処理の呼出が出来ませんでした。", TITLE);	// 要MSG確認
+				}
+				else{
+					// 2016/02/24 DA upd start
+//					var bol:Boolean = event.result as Boolean;
+					var strResult:String = event.result as String;
+
+					// 戻り値が"1"の場合
+					if(strResult == "1")
+					{
+						// 組立時のラインと画面で入力したラインが違います。
+						Alert.show(resourceManager.getString('message','msg00029'), TITLE);
+					}
+					// 戻り値が"2"の場合
+					else if(strResult == "2")
+					{
+						// 指定された車両は存在しないか、既に検査工程を通過したためマスタ切替出来ません。\n組立投入済みで検査未通過の車両を入力して下さい。
+						Alert.show(resourceManager.getString('message','msg00030'), TITLE);
+//						var name:String;
+//						if (this.registType == MasterRegistEvent.Book) {
+//							name = "全体";
+//						} else {
+//							name = "検査順のみ";
+//						}
+//						Alert.show("仮マスタ本番登録（" + name + "）を行います。よろしいですか？\nこの処理には数分かかることがあります。", TITLE, Alert.OK | Alert.CANCEL,
+//							this, updateBookAlertCloseEventHandler);
+//
+//						this.gridRowIndex = -1;
+					}
+					else {
+						// 2016/09/09 DA ins start
+						// 戻り値が"3"の場合
+						// 車種のラインがなければ、通常のメッセージでない確認ダイアログで本番登録だけを行う。
+						if (strResult == "3") {				
+							this.isRegistByNoLine = true;
+						}
+						else {
+							this.isRegistByNoLine = false;
+						}
+						// 2016/09/09 DA ins end
+						srvMstRegist.getReserveStatus(selectMst, strBctype);
+					}
+					// 2016/02/24 DA upd end
+				}
+			}
+			
+			// 2016/02/24 DA ins start
+			
+			/**
+			 * 予約中チェック
+			 *
+			 */
+			protected function onGetReserveStatus_resultHandler(event:ResultEvent):void
+			{
+				// サーバー処理の呼出が出来ませんでした
+				if (event.result==null) {
+					Alert.show(resourceManager.getString('message','msg00033'), TITLE);
+				}
+				else
+				{
+					var strResult:String = event.result as String;	
+					if (strResult == null){
+						// 予約中の従業員あり
+						if (this.registType == MasterRegistEvent.Reserve){
+							// 予約
+							Alert.show(StringUtil.substitute(resourceManager.getString('message','msg00005'), event.result), TITLE);
+						}
+						else {
+							// 全体/検査順のみ
+							Alert.show(StringUtil.substitute(resourceManager.getString('message','msg00043'), event.result), TITLE);
+						}
+					}
+					else {
+						if(strResult == "1")
+						{
+							// 予約実行中
+							Alert.show(resourceManager.getString('message','msg00004'), TITLE);
+						}
+						else 
+						{
+							if (this.registType == MasterRegistEvent.Reserve) {
+								// 予約
+								var dialog:RegistReserveDate = PopUpManager.createPopUp(this,RegistReserveDate,true) as RegistReserveDate;
+								dialog.addEventListener(CloseEvent.CLOSE,closeReserveDateWindow);
+								dialog.setMstVer(this.selectMst);
+								dialog.setBctype(this.strBctype);
+								dialog.setUserCode(this.loginUser);
+								dialog.loginUserInfo = this.loginUserInfo;
+								
+								PopUpManager.centerPopUp(dialog);
+							}
+							else {
+								var mstName:String = MstSelectEvent.getMasterName(selectMst);
+								var checkName:String;
+								if (this.registType == MasterRegistEvent.CheckAll) {
+									// 全体
+									checkName = resourceManager.getString('resource','cli0800004');
+								} else {
+									// 検査順のみ
+									checkName = resourceManager.getString('resource','cli0800005');
+								}
+
+								// 2016/09/09 DA ins start
+								if (this.isRegistByNoLine) {
+									// 車種のラインがない場合のメッセージ
+									if (resourceManager.getBoolean('resource','lineInputExistence')) {									
+										// 組立投入済み車両が無いためラインの妥当性チェックができませんでした。車種・ラインに間違いがないことを確認してください。\n{0}マスタ本番登録（{1}）を行ってよろしいですか？
+										Alert.show(StringUtil.substitute(resourceManager.getString('message','msg00051'), mstName, checkName), TITLE, Alert.OK | Alert.CANCEL,
+											this, updateCheckAlertCloseEventHandler,
+											null,
+											Alert.CANCEL
+										);
+									}
+									else {
+										// 組立投入済み車両が無いため車種の妥当性チェックができませんでした。車種・ボデーNo・組立連番に間違いがないことを確認してください。\n{0}マスタ本番登録（{1}）を行ってよろしいですか？
+										Alert.show(StringUtil.substitute(resourceManager.getString('message','msg00052'), mstName, checkName), TITLE, Alert.OK | Alert.CANCEL,
+											this, updateCheckAlertCloseEventHandler,
+											null,
+											Alert.CANCEL
+										);
+									}
+								}
+								else {
+								// 2016/09/09 DA ins end
+									if (Utils.isEmpty(strBcnoH0) && Utils.isEmpty(strBodyNo)){
+										Alert.show(StringUtil.substitute(resourceManager.getString('message','msg00032'), mstName, checkName), TITLE, Alert.OK | Alert.CANCEL,
+											this, updateCheckAlertCloseEventHandler,
+											// 2016/08/29 DA ins start
+											null,
+											Alert.CANCEL
+											// 2016/08/29 DA ins end
+										);
+									}
+									else {
+										Alert.show(StringUtil.substitute(resourceManager.getString('message','msg00031'), mstName, checkName), TITLE, Alert.OK | Alert.CANCEL,
+											this, updateCheckAlertCloseEventHandler,
+											// 2016/08/29 DA ins start
+											null,
+											Alert.CANCEL
+											// 2016/08/29 DA ins end
+										);
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+			
+			/**
+			 * 仮マスタ本番登録を予約のAlertの閉じるイベント
+			 *
+			 */
+			private function updateCheckAlertCloseEventHandler(event:CloseEvent):void{
+				// OKの時 車種マスタに対して、該当するデータの切替組立連番、切替ボデーNOを更新する。
+				if(event.detail == Alert.OK){
+					// マウスカーソルを砂時計にして画面入力を禁止する
+					CursorManager.setBusyCursor();
+					this.enabled = false;
+					// 車種マスタに対して、該当するデータの切替組立連番、切替ボデーNOを更新する。
+					// 仮マスタ本番登録処理（ストアドファンクション）を実行する。
+					// 仮マスタ本番登録処理（ストアドファンクション）のエラーが発生したら、ロールバックできるように、
+					// updateBookはtempMstRegistを含めている。
+					srvMstChange.updateBook(gridRowData, this.loginUser, this.selectMst, getRegistType(this.registType));
+				}
+			}
+			
+			/**
+			 * 入力ウィンドウが閉じられたときのイベント処理
+			 */
+			public function closeReserveDateWindow(e:CloseEvent):void{
+				//OKが押下された場合だけ処理する。
+				if (e.detail != 1) {
+					return;
+				}
+				// 画面を再表示する
+				srvMstChange.getMVehicleMstRegist(selectMst);
+				// MSG:仮マスタ本番登録の予約をしました。
+				Alert.show(resourceManager.getString('message','msg00042'), TITLE);
+			}
+			
+			/**
+			 * 車種の予約中の状態を取得
+			 *
+			 */
+			protected function onIsReservedMVehicle_resultHandler(event:ResultEvent):void
+			{
+				// サーバー処理の呼出が出来ませんでした
+				if (event.result==null) {
+					Alert.show(resourceManager.getString('message','msg00033'), TITLE);
+				}
+				else
+				{
+					var bol:Boolean = event.result as Boolean;
+					if(!bol)
+					{
+						// 予約実行中
+						Alert.show(resourceManager.getString('message','msg00010'), TITLE);
+					}
+					else 
+					{
+						Alert.show(StringUtil.substitute(resourceManager.getString('message','msg00009'), strBctype), TITLE, Alert.OK | Alert.CANCEL,
+							this, updateTempMstReserveCancelAlertCloseEventHandler,
+							// 2016/08/29 DA ins start
+							null,
+							Alert.CANCEL
+							// 2016/08/29 DA ins end
+						);
+					}
+				}
+			}
+			
+			/**
+			 * 予約解除のAlertの閉じるイベント
+			 *
+			 */
+			private function updateTempMstReserveCancelAlertCloseEventHandler(event:CloseEvent):void{
+				if(event.detail == Alert.OK){
+					// マウスカーソルを砂時計にして画面入力を禁止する
+					CursorManager.setBusyCursor();
+					this.enabled = false;
+					// 予約解除処理
+					srvMstRegist.updateTempMstReserveCancel(this.loginUser, this.selectMst, this.strBctype);
+				}
+			}
+			
+			/**
+			 * 予約解除の結果を取得
+			 *
+			 */
+			protected function onUpdateTempMstReserveCancel_resultHandler(event:ResultEvent):void
+			{
+				// サーバー処理の呼出が出来ませんでした
+				if (event.result==null) {
+					CursorManager.removeBusyCursor();
+					this.enabled = true;
+					Alert.show(resourceManager.getString('message','msg00033'), TITLE);
+				}
+				else
+				{
+					var strResult:String = event.result as String;	
+					if(strResult == "1")
+					{
+						CursorManager.removeBusyCursor();
+						this.enabled = true;
+						Alert.show(resourceManager.getString('message','msg00010'), TITLE);
+					}
+					else 
+					{
+						CursorManager.removeBusyCursor();
+						this.enabled = true;
+						// 画面を再表示する
+						srvMstChange.getMVehicleMstRegist(selectMst);
+						// MSG:仮マスタ本番登録の予約をしました。
+						Alert.show(resourceManager.getString('message','msg00039'), TITLE);
+					}
+				}
+			}
+			
+			// 2016/02/24 DA ins end
+
+			// 2016/02/24 DA del start
+//			/**
+//			 * 仮マスタ本番登録を予約のAlertの閉じるイベント
+//			 *
+//			 */
+//			private function updateBookAlertCloseEventHandler(event:CloseEvent):void{
+//				// OKの時 車種マスタに対して、該当するデータの切替組立連番、切替ボデーNOを更新する。
+//				if(event.detail == Alert.OK){
+//
+//					// マウスカーソルを砂時計にして画面入力を禁止する
+//					CursorManager.setBusyCursor();
+//					this.enabled = false;
+//
+//
+//					// 車種マスタに対して、該当するデータの切替組立連番、切替ボデーNOを更新する。
+//					// 仮マスタ本番登録処理（ストアドファンクション）を実行する。
+//					// 仮マスタ本番登録処理（ストアドファンクション）のエラーが発生したら、ロールバックできるように、
+//					// updateBookはtempMstRegistを含めている。
+//					srvMstChange.updateBook(gridRowData, this.loginUser, getRegistType(this.registType));
+//
+//				}
+//
+//				// NGの時 当該処理を終了数する。
+//
+//			}
+
+//			/**
+//			 * 予約 イベント
+//			 *
+//			 */
+//			private function bookEventHandler(event:MasterRegistEvent):void
+//			{
+//				this.gridRowIndex = event.rowIndex;
+//				this.gridRowData = event.params;
+//				this.registType = event.type;
+//
+//				var bcnoH0:String = event.params.bcnoH0 as String;
+//				var bodyNo:String = event.params.bodyNo as String;
+//
+//				bcnoH0 = bcnoH0 == null ? "" : bcnoH0;
+//				bodyNo = bodyNo == null ? "" : bodyNo;
+//
+//				// 未検査車両有無チェック、サーバ側のAPIを呼び出す。
+//				srvMstChange.isAllNotCheckOfBcdata(bcnoH0, bodyNo);
+//
+//			}
+
+//			 * 予約解除
+//			 * 車種マスタに対して、該当するデータの切替組立連番、切替ボデーNOを更新する。
+//			 *
+//			 */
+//			private function cancleEventHandler(event:MasterRegistEvent):void
+//			{
+//				CursorManager.setBusyCursor();
+//				this.grid.enabled = false;
+//
+//				this.srvMstChange.updateCancel(event.params, this.loginUser);
+//
+//			}
+			// 2016/02/24 DA del end
+			
+			/**
+			 * ユーザーコードの取得後の処理。
+			 * ユーザーコードを持っていなければログイン画面に戻します。
+			 */
+			protected function getUserCode_resultHandler(event:ResultEvent):void
+			{
+				//ユーザコードがなければログインページに戻す
+				if (event.result==null) {
+					CursorManager.removeBusyCursor();
+					grid.enabled = true;
+					var request:URLRequest = new URLRequest("login.html");
+					navigateToURL(request, "_self");
+				}
+				else{
+					this.loginUser = event.result.toString();
+					//セレクトマスタを取得
+					srvUser.getSelectMst();
+
+					// 2016/02/24 DA ins start
+					// ログインユーザ情報を取得
+					srvUser.getMUser(this.loginUser);
+					// 2016/02/24 DA ins end
+				}
+			}
+
+			/**
+			 * セレクトマスタの取得後の処理。
+			 * 選択したマスタに対応した表示・処理を行います。
+			 */
+			protected function getSelectMst_resultHandler(event:ResultEvent):void
+			{
+				selectMst = parseInt(event.result.toString());
+
+				// 2016/02/24 DA upd start
+//				if (selectMst==1) {
+//					// 本番マスタ選択時
+//					selectMst_Label.text = "本番";
+//				} else {
+//					// 仮マスタ選択時
+//					selectMst_Label.text = "仮";
+//				}
+				selectMst_Label.text = MstSelectEvent.getMasterName(selectMst);
+					
+				this.isGetGridDataAfterBookOrCancel = false;
+
+				// 本番or仮テーブルの取得
+				srvMstChange.getMVehicleMstRegist(selectMst);
+				// 2016/02/24 DA upd end
+			}
+
+			/**
+			 * Noを順番にセットする
+			 */
+			private function noColumnFunction(item:Object, column:AdvancedDataGridColumn):String
+			{
+				var no:int = this.gridData.getItemIndex(item) + 1;
+				return no <10 ? ("0" + no.toString() ) : no.toString();
+			}
+
+			/**
+			 * 通信エラーの場合(Data取得Error Event)
+			 */
+			private function onGetMVehicleMstRegistGetFault(e:FaultEvent):void
+			{
+				CursorManager.removeBusyCursor();
+				grid.enabled = true;
+				Alert.show("一覧取得処理でエラーが発生しました。", TITLE);	// 要MSG確認
+			}
+
+			/**
+			 * 通信エラーの場合(Data取得Error Event)
+			 */
+			private function onIsAllNotCheckOfBcdataGetFault(e:FaultEvent):void
+			{
+
+				CursorManager.removeBusyCursor();
+				grid.enabled = true;
+				Alert.show("未検査車両有無チェックでエラーが発生しました。", TITLE);	// 要MSG確認
+			}
+			
+			// 2016/02/24 DA ins start
+			/**
+			 * 通信エラーの場合(Data取得Error Event)
+			 */
+			private function onGetReserveStatusGetFault(e:FaultEvent):void
+			{
+				CursorManager.removeBusyCursor();
+				grid.enabled = true;
+				Alert.show(resourceManager.getString('message','msg00034'), TITLE);
+			}
+			// 2016/02/24 DA ins end
+			
+			// 2016/02/24 DA upd start
+			/**
+			 * 車種マスタに対して、該当するデータの切替組立連番、切替ボデーNOを更新する
+			 */
+			private function onUpdateBookResult(event:ResultEvent):void
+			{
+				// サーバー処理の呼出が出来ませんでした
+				if (event.result==null)
+				{
+					CursorManager.removeBusyCursor();
+					this.enabled = true;
+					Alert.show(resourceManager.getString('message','msg00033'), TITLE);
+				}
+				else
+				{
+					var result:String = event.result as String;
+
+					if(result == "1")
+					{
+						CursorManager.removeBusyCursor();
+						this.enabled = true;
+						Alert.show(resourceManager.getString('message','msg00004'), TITLE);
+					}
+					// 2,3 切替組立連番、切替ボデーNOを更新するのは失敗
+					else if(result == "2" || result == "3")
+					{
+						CursorManager.removeBusyCursor();
+						this.enabled = true;
+						Alert.show("仮マスタ本番登録処理でエラーが発生しました。", TITLE);
+					}
+					else if (result == "4")
+					{
+						// マスタが存在しない
+						CursorManager.removeBusyCursor();
+						this.enabled = true;
+						Alert.show(resourceManager.getString('message','msg00053'), TITLE);
+					}
+						// true => 切替組立連番、切替ボデーNOを更新するのは成功
+					else
+					{
+						isGetGridDataAfterBookOrCancel = true;
+
+						srvMstChange.getMVehicleMstRegist(selectMst);
+						// 予約
+						Alert.show("仮マスタ本番登録を完了しました。", TITLE);
+					}
+				}
+			}
+			// 2016/02/24 DA upd end
+
+			/**
+			 * 車種マスタに対して、該当するデータの切替組立連番、切替ボデーNOを更新するとき、エラーが発生しました
+			 */
+			private function onUpdateBookFault(e:FaultEvent):void
+			{
+				CursorManager.removeBusyCursor();
+				grid.enabled = true;
+				Alert.show("仮マスタ本番登録処理でエラーが発生しました。", TITLE);
+
+			}
+			
+			/**
+			 * 車種の予約中の状態を取得するとき、エラーが発生しました
+			 */
+			private function onIsReservedMVehicleGetFault(e:FaultEvent):void
+			{
+				CursorManager.removeBusyCursor();
+				grid.enabled = true;
+				Alert.show(resourceManager.getString('message','msg00010'), TITLE);
+			}
+			
+			/**
+			 * 予約解除するとき、エラーが発生しました
+			 */
+			private function onUpdateTempMstReserveCancelGetFault(e:FaultEvent):void
+			{
+				CursorManager.removeBusyCursor();
+				grid.enabled = true;
+				Alert.show(resourceManager.getString('message','msg00038'), TITLE);
+			}
+
+			// 2016/02/24 DA del start
+//			/**
+//			 * 仮マスタ本番登録の予約を取り消します
+//			 */
+//			private function onUpdateCancelResult(e:ResultEvent):void
+//			{
+//
+//				isGetGridDataAfterBookOrCancel = true;
+//
+//				// 更新されたデータも取得する
+//				srvMstChange.getMVehicleMstRegist(selectMst);
+//
+//				Alert.show("仮マスタ本番登録の予約を取り消しました。", TITLE);
+//
+//			}
+
+//			/**
+//			 * 予約解除処理でエラーが発生しました
+//			 */
+//			private function onUpdateCancelFault(e:FaultEvent):void
+//			{
+//				CursorManager.removeBusyCursor();
+//				grid.enabled = true;
+//				Alert.show("予約解除処理でエラーが発生しました。", TITLE);	//要MSG確認
+//
+//			}
+
+//			/**
+//			 * マスタ本番登録が完了した時、予約した時の処理。
+//			 */
+//			protected function onUpdateImmediateResult(event:ResultEvent):void
+//			{
+//
+//				if (event.result.toString() == "0") {
+//					isGetGridDataAfterBookOrCancel = true;
+//
+//					srvMstChange.getMVehicleMstRegist(selectMst);
+//
+//					Alert.show("仮マスタ本番登録を完了しました。", TITLE);
+//
+//				} else {
+//					CursorManager.removeBusyCursor();
+//					grid.enabled = true;
+//					Alert.show("仮マスタ本番登録処理でエラーが発生しました。", TITLE);
+//
+//				}
+//			}
+			// 2016/02/24 DA del end
+
+			/**
+			 * 表示された画面を閉じ、ページ遷移を行います。
+			 */
+			private function close():void
+			{
+				// マスタメンテナンスメニュー画面に遷移する
+				var request:URLRequest = new URLRequest("master_menu.html");
+				navigateToURL(request, "_self");
+			}
+
+			/**
+			 * 終了ボタン押下時の処理。
+			 */
+			private function btnExit_clickHandler(event:MouseEvent):void{
+
+				// 本番マスタ選択時は確認不要
+				// 2016/02/24 DA upd start
+//				if (selectMst == 1) {
+				if (MstSelectEvent.isReal(selectMst)) {
+				// 2016/02/24 DA upd end
+					// Browserを閉じる
+					close();
+					return;
+				}
+
+				// 変更有無チェック
+				var length:int = 0;
+
+				for ( var bctype:String in isInputTextChangedDic )
+				{
+					length++;
+				}
+
+				// 未処理データが存在します
+				if ( length > 0){
+					// 編集あり
+					Alert.show("ﾎﾞﾃﾞｰNO、組立連番が入力されましたが、予約されていません。終了してもよろしいですか？",
+						TITLE,
+						Alert.OK | Alert.CANCEL, null, alertBtnExitCloseHandler,
+							// 2016/08/29 DA ins start
+							null,
+							Alert.CANCEL
+							// 2016/08/29 DA ins end
+						);
+					return;
+				}
+
+				// メニュー画面に戻る
+				close();
+			}
+
+			/**
+			 * 終了確認ダイアログの結果処理。
+			 */
+			private function alertBtnExitCloseHandler(e:CloseEvent) : void
+			{
+				if (e.detail == Alert.OK) {
+					close();
+					return;
+				}
+			}
+
+
+			/**
+			 * DataGridの更新日カラムに値をバインドする
+			 */
+			private function updateDateColumnFunction(data:Object, column:AdvancedDataGridColumn):String {
+				var formatter:DateFormatter = new DateFormatter();
+				formatter.formatString = 'YYYY/MM/DD JJ:NN';
+				return formatter.format(data.updateDate);
+			}
+
+
+			/**
+			 * DataGridの更新者カラムに値をバインドする
+			 */
+			private function updateUserColumnFunction(data:MVehicle, column:AdvancedDataGridColumn):String {
+				return data.updateMUser == null ? data.updateUser : data.updateMUser.userName;
+			}
+
+			/**
+			 * 仮マスタ本番登録時の登録種類を、サーバー側で受取可能な値に変換
+			 */
+			private function getRegistType(registType:String):String {
+				// 2016/02/24 DA upd start
+//				if (registType == MasterRegistEvent.Book || registType == MasterRegistEvent.ImmediatelyUpdate) {
+				if (registType == MasterRegistEvent.CheckAll || registType == MasterRegistEvent.ImmediatelyUpdate) {
+					// 2016/02/24 DA upd end
+					// 全体を本番登録（全マスタ）
+					return '0';
+				} else {
+					// 検査順のみ本番登録（工程、検査項目、検査順マスタ）
+					return '1';
+				}
+
+			}
+			
+			// 2016/02/24 DA ins start
+			private var rmenuIndex:int = -1;
+			protected function grid_itemRollOverHandler(event:ListEvent):void
+			{
+				// マウスカーソルの乗っている行を保持しておく。
+				// 右クリックで使用する
+				rmenuIndex = event.rowIndex;
+				grid.selectedIndex = rmenuIndex;
+			}
+
+			/**
+			 * ユーザーログイン情報の取得後の処理。
+			 */
+			protected function getMUser_resultHandler(event:ResultEvent):void {
+				this.loginUserInfo = event.result as MUser;
+				this.enabledComponent();
+			}
+			
+			/**
+			 * コンポーネントの制御をする
+			 */
+			private function enabledComponent():void
+			{
+				if (MUserUtils.isAdministrator(this.loginUserInfo)) {
+					// マスタ管理者
+					if (MstSelectEvent.isReal(selectMst)) {
+						this.grid.enabled = false;
+					} else {
+						this.grid.enabled = true;
+					}
+					
+				} else {
+					// 以外
+					this.grid.enabled = false;
+				}
+			}
+			// 2016/02/24 DA ins end
+
+			// 2016/02/24 DA ins start
+			/**
+			 * スクロール時に正しいデータを表示する
+			 */
+			protected function grid_scrollHandler(event:ScrollEvent):void
+			{
+				this.gridScrollPosition = this.grid.verticalScrollPosition;
+			}
+			// 2016/02/24 DA ins end
+
+		]]>
+	</fx:Script>
+
+
+
+	<fx:Declarations>
+		<!-- 非ビジュアルエレメント (サービス、値オブジェクトなど) をここに配置 -->
+		<s:RemoteObject id="srvUser" destination="MUserService">
+			<s:method name="getUserCode" result="getUserCode_resultHandler(event)"/>
+			<s:method name="getSelectMst" result="getSelectMst_resultHandler(event)"/>
+			<s:method name="getMUser" result="getMUser_resultHandler(event)"/>
+		</s:RemoteObject>
+
+		<s:RemoteObject id="srvMstChange" destination="MVehicleService">
+			<s:method name="getMVehicleMstRegist" fault="onGetMVehicleMstRegistGetFault(event)"  result="onGetMVehicleMstRegist_resultHandler(event)"/>
+			<s:method name="isAllNotCheckOfBcdata" fault="onIsAllNotCheckOfBcdataGetFault(event)" result="onIsAllNotCheckOfBcdata_resultHandler(event)"/>
+			<s:method name="updateBook" result="onUpdateBookResult(event)" fault="onUpdateBookFault(event)" />
+			<!-- 2016/02/24 DA del start-->
+			<!--<s:method name="updateImmediate" result="onUpdateImmediateResult(event)" fault="onUpdateBookFault(event)" />-->
+			<!--<s:method name="updateCancel" result="onUpdateCancelResult(event)" fault="onUpdateCancelFault(event)" />-->
+			<!-- 2016/02/24 DA del end-->
+		</s:RemoteObject>
+
+		<s:RemoteObject id="srvMstRegist" destination="mstRegistService">
+			<s:method name="getReserveStatus" fault="onGetReserveStatusGetFault(event)"  result="onGetReserveStatus_resultHandler(event)"/>
+			<s:method name="isReservedMVehicle" fault="onIsReservedMVehicleGetFault(event)"  result="onIsReservedMVehicle_resultHandler(event)"/>
+			<s:method name="updateTempMstReserveCancel" fault="onUpdateTempMstReserveCancelGetFault(event)"  result="onUpdateTempMstReserveCancel_resultHandler(event)"/>
+		</s:RemoteObject>
+	</fx:Declarations>
+
+
+	<s:HGroup width="100%" height="24" verticalAlign="middle" fontFamily="ＭＳ ゴシック">
+		<s:Label text="仮マスタ本番登録" fontSize="14" fontWeight="bold"/>
+		<s:HGroup width="100%" height="24" fontFamily="ＭＳ ゴシック" horizontalAlign="right" verticalAlign="middle">
+			<s:Label text="マスタ選択" width="229" textAlign="right"/>
+			<s:Label text="仮" fontWeight="bold" id="selectMst_Label"/>
+		</s:HGroup>
+	</s:HGroup>
+	<s:Label text="※「検査順のみ」は工程、検査項目、検査順マスタを本番登録します" width="100%" textAlign="right"/>
+
+	<mx:AdvancedDataGrid id="grid" designViewDataType="flat" rowCount="10" width="100%" height="100%"
+						 allowMultipleSelection="false" verticalAlign="middle" itemRollOver="grid_itemRollOverHandler(event)"
+						 dragEnabled="false"  dropEnabled="false" sortExpertMode="true" headerSortSeparatorSkin="mx.skins.ProgrammaticSkin"
+						 horizontalScrollPolicy="on" scroll="grid_scrollHandler(event)"
+						 >
+
+		<mx:columns>
+			<mx:AdvancedDataGridColumn headerText="No" dataField="no" editable="false" width="40" backgroundColor="#C4C4C4" textAlign="right" sortable="false" labelFunction="noColumnFunction"/>
+			<mx:AdvancedDataGridColumn headerText="BC車種区分"  width="80" dataField="bctype" editable="false" sortable="false" paddingLeft="3"/>
+			<mx:AdvancedDataGridColumn headerText="車種名称" width="90" dataField="vehicleName" editable="false" sortable="false" paddingLeft="3"/>
+			<mx:AdvancedDataGridColumn headerText="ライン" width="45" dataField="line" visible="{resourceManager.getBoolean('resource','lineInputExistence')}" editable="true" sortable="false" itemRenderer="jp.co.ctc.components.TextInput"/>
+			<mx:AdvancedDataGridColumn headerText="切替組立連番" width="90" dataField="bcnoH0" visible="true" editable="true" sortable="false" itemRenderer="jp.co.ctc.components.TextInput"/>
+			<mx:AdvancedDataGridColumn headerText="切替ボデーNo"  width="90" dataField="bodyNo" editable="true" sortable="false" itemRenderer="jp.co.ctc.components.TextInput"/>
+			<mx:AdvancedDataGridColumn headerText="本番登録" width="600" dataField ="booking"  editable="false" sortable="false" itemRenderer="jp.co.ctc.components.MasterRegist"/>
+			<!-- 2016/08/10 DA upd start-->
+			<!-- <mx:AdvancedDataGridColumn headerText="生産終了"  width="70" dataField="endOfProd" editable="false" sortable="false" itemRenderer="jp.co.ctc.components.CheckBox" />-->
+			<mx:AdvancedDataGridColumn headerText="非表示"  width="70" dataField="endOfProd" editable="false" sortable="false" itemRenderer="jp.co.ctc.components.CheckBox" />
+			<!-- 2016/08/10 DA upd end-->
+			<mx:AdvancedDataGridColumn headerText="更新者" editable="false" backgroundColor="#C4C4C4" sortable="false" labelFunction="updateUserColumnFunction" width="120" />
+			<mx:AdvancedDataGridColumn headerText="更新日" editable="false" backgroundColor="#C4C4C4" sortable="false" labelFunction="updateDateColumnFunction" width="80" textAlign="right" />
+		</mx:columns>
+
+
+	</mx:AdvancedDataGrid>
+
+	<s:HGroup width="200" height="30" verticalAlign="middle" horizontalAlign="center">
+
+		<s:Button label="終了" height="30" id="btnExit" click="btnExit_clickHandler(event)"/>
+	</s:HGroup>
+
+</s:Application>

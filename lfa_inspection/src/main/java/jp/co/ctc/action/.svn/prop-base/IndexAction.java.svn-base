@@ -1,0 +1,11 @@
+K 13
+svn:mime-type
+V 10
+text/plain
+K 13
+svn:mergeinfo
+V 285
+/LFA/branches/1.0.0/lfa_inspection/src/main/java/jp/co/ctc/action/IndexAction.java:745-771
+/LFA/branches/4.2.0/lfa_inspection/src/main/java/jp/co/ctc/action/IndexAction.java:2464-2487
+/LFA/branches/labo/no_sdcard/lfa_inspection/src/main/java/jp/co/ctc/action/IndexAction.java:1638-2050
+END

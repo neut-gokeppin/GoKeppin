@@ -1,0 +1,2541 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ctc:BaseApplication
+			xmlns:ctc="jp.co.ctc.components.*"
+			xmlns:fx="http://ns.adobe.com/mxml/2009"
+			xmlns:s="library://ns.adobe.com/flex/spark"
+			xmlns:mx="library://ns.adobe.com/flex/mx" pageTitle="誤欠品検出力向上ツール - 指示記号マスタメンテナンス"
+			xmlns:local="*">
+	<ctc:layout>
+		<s:VerticalLayout paddingLeft="8" paddingRight="8" paddingTop="8" paddingBottom="8" horizontalAlign="center" gap="8"/>
+	</ctc:layout>
+	<fx:Style source="lfa_inspection.css"/>
+	<!-- 2016/02/24 DA ins start -->
+	<fx:Metadata>
+		[ResourceBundle("message")]
+		[ResourceBundle("resource")]
+	</fx:Metadata>
+	<!-- 2016/02/24 DA ins end -->
+	<fx:Script>
+		<![CDATA[
+			import jp.co.ctc.components.BcsignRegistButton;
+			import jp.co.ctc.components.ImageButton;
+			import jp.co.ctc.components.RegistReserveDate;
+			import jp.co.ctc.components.ShowImageButton;
+			import jp.co.ctc.entity.MBcsignDTO;
+			import jp.co.ctc.entity.MVehicle;
+			import jp.co.ctc.event.MasterRegistEvent;
+			import jp.co.ctc.event.MstSelectEvent;
+			import jp.co.ctc.util.MUserUtils;
+			import jp.co.ctc.util.Utils;
+
+			import mx.collections.ArrayList;
+			import mx.collections.IList;
+			import mx.controls.Alert;
+			import mx.controls.DataGrid;
+			import mx.controls.advancedDataGridClasses.AdvancedDataGridItemRenderer;
+			import mx.events.AdvancedDataGridEvent;
+			import mx.events.CloseEvent;
+			import mx.events.CollectionEvent;
+			import mx.events.CollectionEventKind;
+			import mx.events.FlexEvent;
+			import mx.events.ListEvent;
+			import mx.events.PropertyChangeEvent;
+			import mx.events.ScrollEvent;
+			import mx.formatters.DateFormatter;
+			import mx.managers.CursorManager;
+			import mx.managers.PopUpManager;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			import mx.utils.StringUtil;
+
+			import spark.events.IndexChangeEvent;
+
+			private var rmenu:ContextMenu;
+			private var rmenuitem1:ContextMenuItem;
+			private var rmenuitem2:ContextMenuItem;
+			// 2014/04/07 DA ins start
+			private var rmenuitem3:ContextMenuItem;
+			// 2014/04/07 DA ins end
+			private var rmenuIndex:int = -1;
+			private var rmenuItem:MBcsignDTO;
+			public var TITLE:String = "指示マスタメンテナンス";
+
+			public var DdlList:ArrayCollection = new ArrayCollection();
+
+			// 保存時に、保存処理が完了したか判定するためのカウンタ
+			private var updateCnt:int;
+
+			// 編集中の車種区分を保持する変数
+			private var editBctype:String = "";
+
+			// 2016/02/24 DA ins start
+			private var imageOutputFlag:Boolean;
+			private var file:FileReference;
+			private var diffFlag:Boolean = false;
+			private var selectSignCodeArray:Array;
+			private var selectBcsignArray:ArrayCollection;
+			private var selectBctype:String;
+			private var gridScrollPosition:int = 0; // 表示行のインデックス
+			private var registType:String; // 登録種別
+			/**
+			 * 入力項目は編集不可のフラグである
+			 */
+			public var isBcsignMainte :Boolean = true;
+			/**
+			 * 車種の予約フラグ
+			 */
+			public var isReservedMVehicle:Boolean = false;
+			// 2016/02/24 DA ins end
+
+			/**
+			 * セレクトマスタの取得後の処理
+			 * @param event 正常に結果を返したことを示すイベント
+			 */
+			override protected function getSelectMst_resultHandler(event:ResultEvent):void
+			{
+				super.getSelectMst_resultHandler(event);
+
+				// 2016/02/24 DA upd start
+				selectMst_Label.text = MstSelectEvent.getMasterName(selectMst);
+
+//				if (selectMst==1) {
+				if (MstSelectEvent.isReal(selectMst)) {
+				// 2016/02/24 DA upd end
+					// 本番マスタ選択時
+
+					// 2016/02/24 DA del
+//					selectMst_Label.text = "本番";
+					// 2016/02/24 DA end
+					btnSaveData.enabled = false;
+
+					grid.editable = "false";
+
+				} else {
+					// 仮マスタ選択時
+
+					// 2016/02/24 DA del start
+//					selectMst_Label.text = "仮";
+					// 2016/02/24 DA del end
+
+					// 2016/02/24 DA del start
+					// コンテキストメニューの作成
+//					rmenu = new ContextMenu();
+//					rmenu.hideBuiltInItems();
+//					rmenu.addEventListener(ContextMenuEvent.MENU_SELECT, rmenu_menuSelectHandler);
+
+//					rmenuitem1 = new ContextMenuItem("行を追加");
+//					rmenuitem1.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, addRowHandler);
+//					rmenu.customItems.push(rmenuitem1);
+//					rmenuitem2 = new ContextMenuItem("行を削除");
+//					rmenuitem2.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, removeRowHandler);
+//					rmenu.customItems.push(rmenuitem2);
+//
+//					// 2014/04/07 DA ins start
+//					rmenuitem3 = new ContextMenuItem("画像を削除", true);
+//					rmenuitem3.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, removePictureHandler);
+//					rmenu.customItems.push(rmenuitem3);
+//					// 2014/04/07 DA ins end
+					// 2016/02/24 DA del end
+
+					grid.editable = "true";
+				}
+				// グループ検索
+				srvGroup.getMGroupNames(selectMst);
+
+				// 車種マスタを取得
+				srvVehicle.getMVehicle();
+			}
+
+			/**
+			 * 右クリックメニュー表示時の処理
+			 */
+			private function rmenu_menuSelectHandler(event:ContextMenuEvent):void {
+				// 右クリックされた行を保持しておく
+				if (-1 < rmenuIndex && rmenuIndex < acGrid.length) {
+					rmenuItem = acGrid.getItemAt(rmenuIndex) as MBcsignDTO;
+				} else {
+					rmenuItem = null;
+				}
+
+				// 予約中でない場合、メニューの更新
+				if (rmenuItem != null && rmenuItem.reserveFlag != "1" && rmenuItem.reserveFlag != "2") {
+					// コンテントメニューを作り直す
+					var itemNum:int = rmenu.customItems.length;
+					for (var i:int = 0; i < itemNum; i++){
+						rmenu.customItems.pop();
+					}
+
+					// 行を追加
+					rmenuitem1 = new ContextMenuItem(resourceManager.getString('resource','cli1200012'));
+					rmenuitem1.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, addRowHandler);
+					rmenu.customItems.push(rmenuitem1);
+
+					// 本番削除判定
+					if (rmenuItem != null && rmenuItem.sopDeleteFlag == "1"){
+						// 行削除の取消
+						rmenuitem2 = new ContextMenuItem(resourceManager.getString('resource','cli1200014'));
+						rmenuitem2.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, recoveryRowHandler);
+						rmenu.customItems.push(rmenuitem2);
+					}
+					else {
+						// 行を削除
+						rmenuitem2 = new ContextMenuItem(resourceManager.getString('resource','cli1200013'));
+						rmenuitem2.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, removeRowHandler);
+						rmenu.customItems.push(rmenuitem2);
+					}
+
+					rmenuitem3 = new ContextMenuItem("画像を削除", true);
+					rmenuitem3.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, removePictureHandler);
+					rmenu.customItems.push(rmenuitem3);
+				}
+			}
+
+			/**
+			 * 行追加の処理
+			 */
+			private function addRowHandler(event:ContextMenuEvent):void {
+				// 行選択チェック
+				if (rmenuItem == null) {
+					Alert.show("追加対象の行を右クリックしてください", TITLE);
+					return;
+				}
+
+				// 固定検査項目チェック
+				if (!rmenuItem.msgDiv) {
+					// 2016/02/24 DA upd start
+					//Alert.show("固定検査は行の追加ができません。", TITLE);
+					Alert.show("生産指示の直接表示の場合、行の追加はできません", TITLE);
+					// 2016/02/24 DA upd end
+					return;
+				}
+
+				// 新しいMBcsignDTOオブジェクトを作成
+				var newDTO:MBcsignDTO = new MBcsignDTO();
+				// 2016/02/24 DA ins start
+				newDTO.bcSign = "";
+				newDTO.signContents = "";
+				newDTO.dummySign = "";
+				newDTO.notes = "";
+				newDTO.reserveFlag = "0";
+				newDTO.sopDeleteFlag = "0";
+				// 2016/02/24 DA ins end
+
+				// 2017/04/26 CTC ins start
+				newDTO.msgNo = rmenuItem.msgNo;
+				newDTO.itemName = rmenuItem.itemName;
+				newDTO.bcPosition = rmenuItem.bcPosition;
+				newDTO.bcLength = rmenuItem.bcLength;
+				// 2017/04/26 CTC ins end
+
+				newDTO.mstVer = rmenuItem.mstVer;
+				newDTO.itemCode = rmenuItem.itemCode;
+				newDTO.msgDiv = rmenuItem.msgDiv;
+				newDTO.dummySign = "";
+				newDTO.insertUser = loginUser;
+				newDTO.editDiv = "I";
+				// 行を追加
+				var row:int = acGrid.getItemIndex(rmenuItem);
+				acGrid.addItemAt(newDTO, row + 1);
+			}
+
+			/**
+			 * 行削除の処理
+			 */
+			private function removeRowHandler(event:ContextMenuEvent):void {
+				// 行選択チェック
+				if (rmenuItem == null) {
+					// 2016/02/24 DA upd start
+					//Alert.show("削除対象の行を右クリックしてください", TITLE);
+					Alert.show("記号削除対象の行を右クリックしてください", TITLE);
+					// 2016/02/24 DA upd end
+					return;
+				}
+
+				// 2016/02/24 DA ins start
+				// 予約中の場合
+				if (rmenuItem != null && (rmenuItem.reserveFlag == "1" || rmenuItem.reserveFlag == "2")) {
+					Alert.show("予約中の場合は削除できません", TITLE);
+					return;
+				}
+				// 2016/02/24 DA ins end
+
+				// 固定検査項目チェック
+				if (!rmenuItem.msgDiv) {
+					// 2016/02/24 DA upd start
+					//Alert.show("記号を使用しない検査項目の行は削除できません", TITLE);
+					Alert.show("記号を使用しない検査項目の行は記号削除できません", TITLE);
+					// 2016/02/24 DA upd end
+					return;
+				}
+
+				// 2016/09/26 DA upd start
+				// 最後の行かどうかをチェック
+				var hasMoreRows:Boolean = false;
+				var itemCodeCnt:int = 0;
+				var sopDeleteFlagCnt:int = 1;	// 自分自身を最初に加算しておく
+				for each (var dto:MBcsignDTO in acGrid) {
+					//if (dto != rmenuItem && dto.itemCode == rmenuItem.itemCode) {
+					//	hasMoreRows = true;
+					//	break;
+					//}
+					if (dto.itemCode == rmenuItem.itemCode) {
+						itemCodeCnt++;
+						if (dto.sopDeleteFlag == "1") {
+							sopDeleteFlagCnt++;
+						}
+					}
+				}
+				if (itemCodeCnt > sopDeleteFlagCnt) {
+					hasMoreRows = true;
+				}
+				// 2016/09/26 DA upd end
+
+
+				// 最後の行でなければ削除する
+				if (hasMoreRows) {
+					// 2016/02/24 DA upd start
+					rmenuItem.sopDeleteFlag = "1";
+					this.ddlVehicle.setFocus();
+//					var row:int = acGrid.getItemIndex(rmenuItem);
+//					acGrid.removeItemAt(row);
+					// 2016/02/24 DA upd end
+				} else {
+					// 2016/02/24 DA upd start
+					//Alert.show("検査項目に対して最後の行は削除できません", TITLE);
+					// 検査項目に対して行が一つの場合は削除できません
+					Alert.show(resourceManager.getString('message','msg00057'), TITLE);
+					// 2016/02/24 DA upd end
+				}
+			}
+
+			// 2016/02/24 DA ins start
+			/**
+			 * 行削除の取消の処理
+			 */
+			private function recoveryRowHandler(event:ContextMenuEvent):void {
+				// 行選択チェック
+				if (rmenuItem == null) {
+					// 削除の取消対象の行を右クリックしてください
+					Alert.show(resourceManager.getString('message','msg00048'), TITLE);
+					return;
+				}
+
+				// 最後の行かどうかをチェック
+				var hasMoreRows:Boolean = false;
+				for each (var dto:MBcsignDTO in acGrid) {
+					if (dto != rmenuItem && dto.itemCode == rmenuItem.itemCode) {
+						hasMoreRows = true;
+						break;
+					}
+				}
+				// 最後の行でなければ削除する
+				if (hasMoreRows) {
+					rmenuItem.sopDeleteFlag = "0";
+				}
+			}
+			// 2016/02/24 DA ins end
+
+			/**
+			 * 画像を削除
+			 * 2014/04/07 DA ins
+			 */
+			private function removePictureHandler(event:ContextMenuEvent):void {
+				// 行選択チェック
+				if (rmenuItem == null) {
+					Alert.show("削除対象の行を右クリックしてください", TITLE);
+					return;
+				}
+//				rmenuItem.imgDel = "D";		// 画像削除フラグ
+				if (rmenuItem.fileName == null) {
+					Alert.show("画像が登録されていません", TITLE);
+					return;
+				}
+				// 2016/02/24 DA ins start
+				// 予約中の場合
+				if (rmenuItem != null && (rmenuItem.reserveFlag == "1" || rmenuItem.reserveFlag == "2")) {
+					Alert.show("予約中の場合は画像削除できません", TITLE);
+					return;
+				}
+				rmenuItem.imgDel = "D";		// 画像削除フラグ
+				// 2016/02/24 DA ins end
+
+				var img:MBcsignDTO = new MBcsignDTO;
+				img.fileName = rmenuItem.fileName;
+				removedImgs.addItem(img);
+
+
+				// 編集区分にU:変更をセット & 更新者にログインユーザーをセット
+				if (rmenuItem.signCode == 0)
+				{
+					rmenuItem.insertUser = loginUser;
+					rmenuItem.editDiv = "I";
+				}
+				else if (rmenuItem.editDiv != "I")
+				{
+					rmenuItem.editDiv = "U";
+				}
+				rmenuItem.updateUser = loginUser;
+				rmenuItem.fileName = null;
+			}
+
+			/**
+			 * データ変更時の処理
+			 */
+			protected function acGrid_collectionChangeHandler(event:CollectionEvent):void
+			{
+				var dto:MBcsignDTO;
+
+				switch(event.kind) {
+					case CollectionEventKind.RESET:
+						// 右クリックメニューをセット
+						grid.contextMenu = rmenu;
+
+						// 2016/02/24 DA ins start
+						this.grid.verticalScrollPosition = this.gridScrollPosition;
+						this.grid.initialize();
+						this.grid.dataProvider.refresh();
+
+						// 差異確認ボタンが押された場合
+						if (diffFlag == true) {
+							diffFlag = false;
+
+							if (acGrid != null && acGrid.length > 0) {
+								dto = MBcsignDTO(acGrid.getItemAt(0));
+								if (dto.diffResultMsg != null && dto.diffResultMsg.length > 0) {
+									Alert.show(dto.diffResultMsg, TITLE);
+								}
+							}
+						}
+						// 2016/02/24 DA ins end
+
+						break;
+					case CollectionEventKind.ADD:
+						grid.selectedIndex = event.location;
+						break;
+					case CollectionEventKind.REMOVE:
+						var sign:MBcsignDTO = event.items[0] as MBcsignDTO;
+						if(sign.editDiv != "I"){
+							removedRows.addItem(sign);
+						}
+						break;
+					case CollectionEventKind.UPDATE:
+						var propertyChangeEvent:PropertyChangeEvent = event.items[0] as PropertyChangeEvent;
+
+						if (propertyChangeEvent.property != "editDiv"    &&
+							propertyChangeEvent.property != "insertUser" &&
+							propertyChangeEvent.property != "updateUser" &&
+							propertyChangeEvent.property != "selectFlag")
+						{
+//							var dto:MBcsignDTO = propertyChangeEvent.currentTarget as MBcsignDTO;
+							dto = propertyChangeEvent.currentTarget as MBcsignDTO;
+
+							//dtoがNullの時は以下の処理を飛ばす
+							if(dto == null){
+								break;
+							}
+
+							// ダミー記号が変更された場合、trimする。
+							// スペースのみで登録されると、PDAでダミー画像が表示されなくなるため。
+							if (propertyChangeEvent.property == "dummySign")
+							{
+								dto.dummySign = Utils.jTrimToEmpty(dto.dummySign);
+							}
+
+							// 編集区分にU:変更をセット & 更新者にログインユーザーをセット
+							if (dto.signCode == 0)
+							{
+								dto.insertUser = loginUser;
+								dto.editDiv = "I";
+							}
+							else if (dto.editDiv != "I")
+							{
+								dto.editDiv = "U";
+							}
+							dto.updateUser = loginUser;
+
+						}
+						break;
+				}
+			}
+
+			/**
+			 * 検索ボタン押下時の処理
+			 */
+			protected function btnGetData_clickHandler(event:MouseEvent):void
+			{
+				// 車種選択チェック
+				if (ddlVehicle.selectedItem == null) {
+					Alert.show("車種を選択してください", TITLE);
+					return;
+				}
+
+				// 2016/02/24 DA ins start
+				var bctype:String = (this.ddlVehicle.selectedItem as MVehicle).bctype
+				srvRegist.isReservedMVehicle(selectMst, bctype);
+				// 2016/02/24 DA ins end
+
+				// 2016/02/24 DA del start
+//				// 変更有無チェック
+//				if (updateExists(acGrid)) {
+//					// 編集あり
+//					Alert.show(
+//						"変更が保存されていません。\n検索すると変更が破棄されます。よろしいですか？",
+//						TITLE,
+//						Alert.OK | Alert.CANCEL, this,
+//						function(event:CloseEvent):void {
+//							if (event.detail == Alert.OK) {
+//								itemDataGet();
+//							}
+//						}
+//					);
+//				}
+//				else
+//				{
+//					itemDataGet();
+//				}
+//				// 2014/04/07 DA ins start
+//				rmenuItem = null;
+//				rmenuIndex = -1;
+//				// 2014/04/07 DA ins end
+				// 2016/02/24 DA del start
+			}
+
+
+			// 2016/02/24 DA ins start
+			/**
+			 * 本番マスタ差異確認ボタン押下時の処理
+			 */
+			protected function btnMasterDiff_clickHandler(event:MouseEvent):void
+			{
+				// 車種選択チェック
+				if (ddlVehicle.selectedItem == null) {
+					Alert.show("車種を選択してください", TITLE);
+					return;
+				}
+
+				// 変更有無チェック
+				if (updateExists(acGrid)) {
+					// 編集あり
+					Alert.show(
+						"変更が保存されていません。\n保存、または再検索してから再度、実行してください。",
+						TITLE
+					);
+					return;
+				}
+
+				// 2016/08/26 DA upd start
+				//itemDataGet_Diff();
+				isDiffCheckItemDataGet();
+				// 2016/08/26 DA upd end
+
+				rmenuItem = null;
+				rmenuIndex = -1;
+				return;
+
+			}
+			// 2016/02/24 DA ins end
+
+			// 2016/02/24 DA ins start
+			/**
+			 * 予約チェック後の処理
+			 */
+			protected function isReservedMVehicle_resultHandler(event:ResultEvent):void
+			{
+				var blnOn:Boolean = false;
+
+				if(event.result != null && event.result) {
+					isReservedMVehicle = true;
+					blnOn = false;
+				} else {
+					isReservedMVehicle = false;
+					// ユーザ権限とマスタバージョンのチェック
+					if (MUserUtils.isAdministrator(this.loginUserInfo)) {
+						// マスタ管理者
+						if (MstSelectEvent.isReal(selectMst)) {
+							blnOn = false;
+						} else {
+							blnOn = true;
+						}
+
+					} else {
+						// 以外
+						blnOn = false;
+					}
+				}
+				if (blnOn) {
+					this.btnSaveData.enabled = true;
+					grid.editable = "true";
+
+					// 車種予約していない場合は、右クリックメニューを表示
+					rmenu = new ContextMenu();
+					rmenu.hideBuiltInItems();
+					rmenu.addEventListener(ContextMenuEvent.MENU_SELECT, rmenu_menuSelectHandler);
+
+					// 行を追加
+					rmenuitem1 = new ContextMenuItem(resourceManager.getString('resource','cli1200012'));
+					rmenuitem1.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, addRowHandler);
+					rmenu.customItems.push(rmenuitem1);
+
+					// 行を削除
+					rmenuitem2 = new ContextMenuItem(resourceManager.getString('resource','cli1200013'));
+					rmenuitem2.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, removeRowHandler);
+					rmenu.customItems.push(rmenuitem2);
+
+					rmenuitem3 = new ContextMenuItem("画像を削除", true);
+					rmenuitem3.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, removePictureHandler);
+					rmenu.customItems.push(rmenuitem3);
+				} else {
+					this.btnSaveData.enabled = false;
+					grid.editable = "false";
+					// 車種予約している場合は、右クリックメニューを出さない
+					rmenu = null;
+				}
+
+				// 変更有無チェック
+				if (updateExists(acGrid)) {
+					// 編集あり
+					Alert.show(
+						"変更が保存されていません。\n検索すると変更が破棄されます。よろしいですか？",
+						TITLE,
+						Alert.OK | Alert.CANCEL, this,
+						function(event:CloseEvent):void {
+							if (event.detail == Alert.OK) {
+								itemDataGet();
+							}
+						},
+						// 2016/08/29 DA ins start
+						null,
+						Alert.CANCEL
+						// 2016/08/29 DA ins end
+					);
+				}
+				else
+				{
+					itemDataGet();
+				}
+
+				rmenuItem = null;
+				rmenuIndex = -1;
+
+				// プライベート変数のマスタバージョンが仮マスタの場合、本番マスタ差異確認を活性にする
+				if (MstSelectEvent.isTemporary(selectMst)) {
+					btnMasterDiff.enabled = true;
+				}
+			}
+			// 2016/02/24 DA ins end
+
+			/**
+			 * 選択したグループ、SelectMstに対応する指示マスタを取得します。
+			 */
+			protected function itemDataGet():void {
+				// 選択された車種を取得
+				editBctype = (ddlVehicle.selectedItem as MVehicle).bctype;
+
+				// 2016/02/24 DA ins start
+				var msgNo:String = this.cmbMsgNo.textInput.text;
+				var reserveFlag:Boolean = this.chkReserve.selected;
+				// 2016/02/24 DA ins end
+
+				// グループドロップダウンリスト選択状態取得
+				if( ddlGroup.selectedIndex==0 ){
+					// 項目検索条件 -> 全表示
+					// 2016/02/24 DA upd start
+					srv.getMBcsignDTO(selectMst, null, editBctype, "_all groups", null, null, msgNo, reserveFlag, null, false);
+					// 2016/02/24 DA upd end
+				} else if (ddlGroup.selectedIndex==1) {
+					// 項目検索条件 -> グループなしのみ
+					// 2016/02/24 DA upd start
+					srv.getMBcsignDTO(selectMst, null, editBctype, "_no groups", null, null, msgNo, reserveFlag, null, false);
+					// 2016/02/24 DA upd end
+				} else {
+					// グループ選択
+					var groupName:String = ddlGroup.selectedItem as String;
+					// 2016/02/24 DA upd start
+					srv.getMBcsignDTO(selectMst, null, editBctype, groupName, null, null, msgNo, reserveFlag, null, false);
+					// 2016/02/24 DA upd end
+				}
+
+				// removedRowsを初期化
+				removedRows = new ArrayCollection();
+				// 2014/04/07 DA ins start
+				// 初期化
+				removedImgs = new ArrayCollection();
+
+				this.gridScrollPosition = this.grid.verticalScrollPosition;
+				this.grid.initialize();
+				this.grid.dataProvider.refresh();
+				// 2014/04/07 DA ins end
+
+			}
+
+			// 2016/02/24 DA ins start
+			/**
+			 * 選択したグループ、SelectMstに対応する指示マスタ(差異確認リスト)を取得します。
+			 */
+			protected function itemDataGet_Diff():void {
+				// 選択された車種を取得
+				editBctype = (ddlVehicle.selectedItem as MVehicle).bctype;
+
+				var msgNo:String = this.cmbMsgNo.textInput.text;
+				var reserveFlag:Boolean = this.chkReserve.selected;
+
+				// グループドロップダウンリスト選択状態取得
+				if( ddlGroup.selectedIndex==0 ){
+					// 項目検索条件 -> 全表示
+					srv.getMBcsignDTO(selectMst, null, editBctype, "_all groups", null, null, msgNo, reserveFlag, null, true);
+				} else if (ddlGroup.selectedIndex==1) {
+					// 項目検索条件 -> グループなしのみ
+					srv.getMBcsignDTO(selectMst, null, editBctype, "_no groups", null, null, msgNo, reserveFlag, null, true);
+				} else {
+					// グループ選択
+					var groupName:String = ddlGroup.selectedItem as String;
+					srv.getMBcsignDTO(selectMst, null, editBctype, groupName, null, null, msgNo, reserveFlag, null, true);
+				}
+
+				// removedRowsを初期化
+				removedRows = new ArrayCollection();
+				// 2014/04/07 DA ins start
+				// 初期化
+				removedImgs = new ArrayCollection();
+
+				this.gridScrollPosition = this.grid.verticalScrollPosition;
+				this.grid.initialize();
+				this.grid.dataProvider.refresh();
+
+				diffFlag = true;
+				// 2014/04/07 DA ins end
+
+			}
+			// 2016/02/24 DA ins end
+
+			// 2016/08/26 DA ins start
+			/**
+			 * 検索データが存在するかチェック
+			 */
+			protected function isDiffCheckItemDataGet():void {
+
+				// 選択された車種を取得
+				editBctype = (ddlVehicle.selectedItem as MVehicle).bctype;
+				var msgNo:String = this.cmbMsgNo.textInput.text;
+				var reserveFlag:Boolean = this.chkReserve.selected;
+
+				// グループドロップダウンリスト選択状態取得
+				if( ddlGroup.selectedIndex==0 ){
+					// 項目検索条件 -> 全表示
+					srv.isSearchMBcsign(selectMst, null, editBctype, "_all groups", null, null, msgNo, reserveFlag, null, false);
+				} else if (ddlGroup.selectedIndex==1) {
+					// 項目検索条件 -> グループなしのみ
+					srv.isSearchMBcsign(selectMst, null, editBctype, "_no groups", null, null, msgNo, reserveFlag, null, false);
+				} else {
+					// グループ選択
+					var groupName:String = ddlGroup.selectedItem as String;
+					srv.isSearchMBcsign(selectMst, null, editBctype, groupName, null, null, msgNo, reserveFlag, null, false);
+				}
+			}
+
+			/**
+			 * チェック成功時の処理。
+			 */
+			protected function isSearchMBcsign_resultHandler(event:ResultEvent):void
+			{
+				if (event.result == null) {
+					Alert.show(resourceManager.getString('message','msg00033'), TITLE);
+					return;
+				}
+
+				if (event.result) {
+					// 検索結果がある場合
+					itemDataGet_Diff();
+				}
+				else {
+					// 画面クリア
+					grid.dataProvider = new ArrayCollection();
+
+					// 検索結果がない場合
+					itemDataGet_Diff2();
+				}
+
+				// 初期化
+				removedRows = new ArrayCollection();
+				removedImgs = new ArrayCollection();
+			}
+
+			/**
+			 * 検索データが0件のため、選択したグループ、SelectMstに対応する指示マスタ(差異確認リスト)の結果メッセージのみを取得します。
+			 */
+			protected function itemDataGet_Diff2():void {
+
+				// 選択された車種を取得
+				editBctype = (ddlVehicle.selectedItem as MVehicle).bctype;
+				var msgNo:String = this.cmbMsgNo.textInput.text;
+				var reserveFlag:Boolean = this.chkReserve.selected;
+
+				// グループドロップダウンリスト選択状態取得
+				if( ddlGroup.selectedIndex==0 ){
+					// 項目検索条件 -> 全表示
+					srv.getDiffMBcsign(selectMst, null, editBctype, "_all groups", null, null, msgNo, reserveFlag, null, true);
+				} else if (ddlGroup.selectedIndex==1) {
+					// 項目検索条件 -> グループなしのみ
+					srv.getDiffMBcsign(selectMst, null, editBctype, "_no groups", null, null, msgNo, reserveFlag, null, true);
+				} else {
+					// グループ選択
+					var groupName:String = ddlGroup.selectedItem as String;
+					srv.getDiffMBcsign(selectMst, null, editBctype, groupName, null, null, msgNo, reserveFlag, null, true);
+				}
+
+				this.gridScrollPosition = this.grid.verticalScrollPosition;
+				this.grid.initialize();
+				this.grid.dataProvider.refresh();
+
+			}
+
+			/**
+			 * 取得成功時の処理。
+			 */
+			protected function getDiffMBcsign_resultHandler(event:ResultEvent):void
+			{
+				if (event.result == null) {
+					Alert.show(resourceManager.getString('message','msg00033'), TITLE);
+					return;
+				}
+
+				var strResult:String = event.result as String;
+				if (StringUtil.trim(strResult) != "") {
+					Alert.show(strResult, TITLE);
+				}
+			}
+			// 2016/08/26 DA ins end
+
+			/**
+			 * 保存ボタン押下時の処理
+			 */
+			protected function btnSaveData_clickHandler(event:MouseEvent):void
+			{
+				// 変更有無チェック
+				if (!updateExists(acGrid))
+				{
+					// 編集なし
+					Alert.show("保存する内容がありません", TITLE);
+					return;
+				}
+
+				// 2016/02/24 DA ins start
+				// 予約中チェック
+				var itemCodeList:ArrayCollection = new ArrayCollection();
+				var count:int = 0;
+				// 変更したコードを取得
+				for each (var dto:MBcsignDTO in acGrid) {
+					if (dto.editDiv == "U") {
+						itemCodeList.addItem(dto.signCode);
+					}
+					if (dto.editDiv == "I" && (dto.sopDeleteFlag == "0" || dto.sopDeleteFlag == null)) {
+						count++;
+					}
+				}
+
+				// 新規を削除した場合のみの場合は再表示して終わる
+				if (itemCodeList.length == 0 && count == 0) {
+					itemDataGet();
+					return;
+				}
+
+				srvRegist.isReservedVehicleSign(selectMst, editBctype, itemCodeList);
+				// 2016/02/24 DA ins end
+			}
+
+			/**
+			 * 予約チェック処理（呼び出しの異常終了、通信エラー）
+			 */
+			private function onIsReservedVehicleSignFault(e:FaultEvent):void
+			{
+				Alert.show(resourceManager.getString('message','msg00034'), TITLE);
+			}
+
+			/**
+			 * 予約チェック処理（呼び出しの正常終了）
+			 */
+			protected function isReservedVehicleSign_resultHandler(event:ResultEvent):void
+			{
+				// 2016/02/24 DA ins start
+				// サーバー処理の呼出が出来ませんでした
+				if (event.result == null) {
+					Alert.show(resourceManager.getString('message','msg00033'), TITLE);
+				}
+
+				if (event.result) {
+					// 予約されているため、保存することができません。
+					Alert.show(resourceManager.getString('message','msg00023'), TITLE);
+					return;
+				}
+				// 2016/02/24 DA ins end
+
+				// 処理対象の行
+				var dto:MBcsignDTO;
+
+				//入力チェック
+				for(var i:int = 0; i < acGrid.length; i++) {
+					dto = MBcsignDTO(acGrid.getItemAt(i));
+
+					// 変更が無ければチェックしない
+					if (dto.editDiv == null)
+					{
+						continue;
+					}
+
+					// 2016/02/24 DA ins start
+					// 表示行を一時退避する
+					this.gridScrollPosition = this.grid.verticalScrollPosition;
+
+					// 削除している場合のチェック
+					if (dto.sopDeleteFlag == "1") {
+
+						// 削除した記号がダミー記号に使われていないかチェック
+						var index:int = dummySignDeleteCheck(dto);
+						if (index != -1) {
+							Alert.show("ダミー記号は、同じ検査項目に存在するものを入力してください。", TITLE);
+							Utils.gridSelectRow(grid, index);
+							return;
+						}
+
+						// 以外はチェックしない
+						continue;
+					}
+					// 2016/02/24 DA ins end
+
+					// 記号空白チェック
+					var bcsign:String = dto.bcSign;
+					if (dto.msgDiv && Utils.isSpaceJ(bcsign)) {
+						Alert.show("記号を入力してください。", TITLE);
+						Utils.gridSelectRow(grid,i);
+						return;
+					}
+					//記号入力文字数チェック
+					if (dto.msgDiv && bcsign != null && Utils.jTrim(bcsign).length > 10) {
+						Alert.show("記号は10文字以下にしてください。", TITLE);
+						Utils.gridSelectRow(grid,i);
+						return;
+					}
+
+					//入力文字数チェック
+					var signContents:String = acGrid.getItemAt(i).signContents;
+					if (signContents!=null && signContents.length > 30) {
+						Alert.show("内容を30文字以下にしてください。", TITLE);
+						Utils.gridSelectRow(grid,i);
+						return;
+					}
+
+					//入力文字数チェック
+					var notes:String = acGrid.getItemAt(i).notes;
+					if (notes != null && notes.length > 50) {
+						Alert.show("備考は50文字以下にしてください。", TITLE);
+						Utils.gridSelectRow(grid,i);
+						return;
+					}
+
+					// ダミー記号文字数チェック
+					if (dto.dummySign != null && dto.dummySign.length > 100) {
+						Alert.show("ダミー記号は100文字以下にしてください。", TITLE);
+						Utils.gridSelectRow(grid,i);
+						return;
+					}
+
+					// ダミー記号チェック
+					if (!dummySignCheck(dto))
+					{
+						Alert.show("ダミー記号は、同じ検査項目に存在するものを入力してください。", TITLE);
+						Utils.gridSelectRow(grid, i);
+						return;
+					}
+				}
+
+				//同一項目の重複チェック
+				if(!row_Sign_Check()){
+					// 2016/02/24 DA del start
+					// スクロール位置が正しくなかったため処理する場所を変更
+//					Alert.show("同一項目内では同じ記号を使えません。", TITLE);
+//					Utils.gridSelectRow(grid,i);
+					// 2016/02/24 DA del end
+					return;
+				}
+
+			// 2016/09/26 DA upd start
+				// 指示記号の削除チェック
+				checkBcsignDelete();
+			}
+
+			/**
+			 * 指示記号の削除チェック処理（呼び出し）
+			 */
+			private function checkBcsignDelete():void
+			{
+				var dtoList:ArrayCollection = new ArrayCollection();
+				for each (var dto:MBcsignDTO in acGrid) {
+					if (dto.editDiv == "U") {
+						dtoList.addItem(dto);
+					}
+					if (dto.editDiv == "I" && (dto.sopDeleteFlag == "0" || dto.sopDeleteFlag == null)) {
+						dtoList.addItem(dto);
+					}
+				}
+				srv.getCheckBcsignDelete(selectMst, editBctype, dtoList);
+			}
+
+			/**
+			 * 指示記号の削除チェック処理（呼び出しの異常終了、通信エラー）
+			 */
+			private function onGetCheckBcsignDeleteFault(e:FaultEvent):void
+			{
+				Alert.show(resourceManager.getString('message','msg00055'), TITLE);
+			}
+
+			/**
+			 * 指示記号の削除チェック処理（呼び出しの正常終了）
+			 */
+			protected function getCheckBcsignDelete_resultHandler(event:ResultEvent):void
+			{
+				if (event.result != null) {
+					Alert.show(StringUtil.substitute(resourceManager.getString('message','msg00056'), event.result), TITLE);
+					return;
+				}
+
+				saveData();
+			}
+
+			/**
+			 * 保存ボタン押下時の処理（チェック後の処理）
+			 */
+			private function saveData():void
+			{
+			// 2016/09/26 DA upd end
+
+				// 処理対象の行
+				var dto:MBcsignDTO;
+
+				// マウスカーソルを砂時計にして画面入力を禁止する
+				CursorManager.setBusyCursor();
+				this.enabled = false;
+
+				// 変更内容をデータベースに反映
+				updateCnt = 0;
+				for each (dto in acGrid)
+				{
+					// 変更が無ければ何もしない
+					if (dto.editDiv == null) {
+						continue;
+					}
+
+					// 2016/02/24 DA ins start
+					// 新規で削除している場合は何もしない
+					if (dto.editDiv == "I" && dto.sopDeleteFlag == "1") {
+						continue;
+					}
+					// 2016/02/24 DA ins end
+
+					// 処理数カウント
+					updateCnt++;
+
+					if (dto.fileReference != null)
+					{
+						if (dto.imgDel == null) {	// 画像削除フラグがない場合　2014/04/07 DA ins
+							// 画像読み込み後に起動するイベントを付ける
+							dto.fileReference.addEventListener(Event.COMPLETE, fileReference_completeHandler(dto));
+							// 画像読み込みを開始
+							dto.fileReference.load();
+
+						} else {				// 2014/04/07 DA ins
+							srv.update(dto);	// 2014/04/07 DA ins
+						}
+					}
+					else
+					{
+						// 画像が添付されていない場合はそのまま更新
+						srv.update(dto);
+					}
+				}
+
+				// 削除処理
+				srv.remove(removedRows);
+
+				// 2014/04/07 DA ins start
+				// 画像削除処理
+				//srv.removeImage(removedImgs);
+				// 2014/04/07 DA ins end
+
+				// 削除のみの変更があった場合
+				if (updateCnt == 0 && this.enabled == false){
+					// マウスカーソルと画面を復帰する
+					this.enabled = true;
+					CursorManager.removeBusyCursor();
+					Alert.show("削除が完了しました。", TITLE);
+					itemDataGet();
+				}
+			}
+
+			// 2016/02/24 DA ins start
+			/**
+			 * 削除記号のダミー記号のチェック。
+			 * 削除した記号がダミー記号として入力されていないかどうかをチェックします。
+			 *
+			 * @return
+			 *     -1:OK --- ダミー記号に存在しない
+			 *     0以上:NG --- ダミー記号に存在する。存在した位置を返す。
+			 */
+			private function dummySignDeleteCheck(row:MBcsignDTO):int
+			{
+				for(var i:int = 0; i < acGrid.length; i++) {
+
+					var dto:MBcsignDTO = MBcsignDTO(acGrid.getItemAt(i));
+
+					// 削除している場合はチェック対象にしない
+					if (dto.sopDeleteFlag == "1") {
+						continue;
+					}
+
+					// 同じ項目コードでない場合はチェック対象にしない
+					if (row.itemCode != dto.itemCode) {
+						continue;
+					}
+
+					// ダミー記号を一つずつ処理
+					for each (var s:String in dto.dummySign.split(","))
+					{
+						// ダミー記号が空白の場合は無視する ⇒ 次のダミー記号へ
+						if (StringUtil.trim(s) == "") {
+							continue;
+						}
+
+						if (StringUtil.trim(row.bcSign) == StringUtil.trim(s)) {
+							// ダミー記号に一致する記号が存在する
+							return i;
+						}
+					}
+				}
+
+				return -1;
+			}
+			// 2016/02/24 DA ins end
+
+			/**
+			 * ダミー記号のチェック。
+			 * ダミー記号として入力された記号が、全て同一検査項目内に存在するかどうかをチェックします。
+			 *
+			 * @return
+			 *     true:OK --- ダミー記号が全て同一検査項目内に存在する
+			 *     false:NG --- 同一検査項目内に存在しないダミー記号がある
+			 */
+			private function dummySignCheck(row:MBcsignDTO):Boolean
+			{
+				// ダミー記号が未入力（null）の場合はチェック不要
+				if (row.dummySign == null)
+				{
+					return true;
+				}
+
+				// ダミー記号を一つずつ処理
+				for each (var s:String in row.dummySign.split(","))
+				{
+					// ダミー記号が空白の場合は無視する ⇒ 次のダミー記号へ
+					if (StringUtil.trim(s) == "")
+					{
+						continue;
+					}
+
+					var exists:Boolean = false;
+					// 指示マスタの全データを処理
+					for each (var dto2:MBcsignDTO in acGrid)
+					{
+    					// 2016/02/24 DA ins start
+						// 削除している場合はチェック対象にしない
+						if (dto2.sopDeleteFlag == "1") {
+							continue;
+						}
+    					// 2016/02/24 DA ins end
+
+						if (row.itemCode == dto2.itemCode &&
+							StringUtil.trim(s) == StringUtil.trim(dto2.bcSign))
+						{
+							// ダミー記号が同一検査項目内に存在する・・・OK ⇒ 次のダミー記号へ
+							exists = true;
+							break;
+						}
+					}
+
+					// ダミー記号が同一検査項目内に存在しない・・・NG
+					if (!exists)
+					{
+						return false;
+					}
+				}
+
+				// 全てのダミー記号が、同一検査項目に存在した・・・OK
+				return true;
+			}
+
+			/**
+			 * 同一項目内の記号重複チェック。
+			 * ＜同じ項目内の記号をArrayに入れ、
+			 * Arrayをソートした後、前後を比べて重複チェックをしています。＞
+			 * @return false:重複がある　true:重複がない
+			 */
+			public function row_Sign_Check():Boolean
+			{
+				var upRowNo:int;
+				var downRowNo:int;
+				//項目内の記号重複チェック
+				for(var i:int=0;i<acGrid.length-1;i++)
+				{
+					//データグリッドのNoの項目を格納
+					downRowNo = (acGrid.getItemAt(i) as MBcsignDTO).itemCode;
+
+					//Noが同じ（同一項目内）なら
+					if(upRowNo==downRowNo)
+					{
+						var ar:Array = new Array();
+
+						//同項目内の一番上の記号を格納
+						ar.push(acGrid.getItemAt(i-1).bcSign);
+
+						while(i != acGrid.length && acGrid.getItemAt(i).itemCode==downRowNo)
+						{
+        					// 2016/02/24 DA ins start
+							// 削除している場合はチェック対象にしない
+							if (acGrid.getItemAt(i).sopDeleteFlag == "1") {
+								i++;
+								continue;
+							}
+        					// 2016/02/24 DA ins end
+
+							ar.push(acGrid.getItemAt(i).bcSign);
+							i++;
+						}
+						ar.sort();
+
+						//ソートしたArrayの前後を比べる
+						for(var roop_count:int=0;roop_count<ar.length-1;roop_count++)
+						{
+							var downRowBcsign:String = Utils.jTrim(ar[roop_count].toString());
+							var upRowBcsign:String = Utils.jTrim(ar[roop_count+1].toString());
+
+							if(downRowBcsign==upRowBcsign)
+							{
+								grid.selectedIndex = i - ar.length + roop_count ;
+								// 2016/02/24 DA ins start
+								// メッセージとスクロール位置設定
+								Alert.show("同一項目内では同じ記号を使えません。", TITLE);
+								Utils.gridSelectRow(grid, grid.selectedIndex);
+								// 2016/02/24 DA ins end
+								return false;
+							}
+						}
+					}
+					//次の行と見比べるために変数に格納
+					upRowNo = downRowNo;
+				}
+				return true;
+			}
+
+			/**
+			 * ファイル読み込み完了時の処理。
+			 * 読み込んだファイルをサーバーにアップロードする
+			 * @param mBcsign 画像ファイルを持ったMBcsignDTOインスタンス
+			 * @return 読み込んだ画像をサーバーにアップロードします。
+			 */
+			protected function fileReference_completeHandler(mBcsign:MBcsignDTO):Function
+			{
+				return function(event:Event):void
+				{
+					// 読み込んだ画像をサーバーにアップロード
+					mBcsign.fileBody = FileReference(event.currentTarget).data;
+					srv.update(mBcsign);
+				}
+			}
+
+			/**
+			 * 保存完了時の処理
+			 */
+			protected function srv_update_resultHandler(event:ResultEvent):void
+			{
+				// 保存が完了したかを判定する
+				updateCnt--;
+				if (updateCnt == 0) {
+					//--------------------------------
+					// 保存処理完了
+					//--------------------------------
+					// データベースから最新のデータを取得
+					itemDataGet();
+					// マウスカーソルと画面を復帰する
+					this.enabled = true;
+					CursorManager.removeBusyCursor();
+					Alert.show("保存が完了しました。", TITLE);
+				}
+			}
+
+
+			/**
+			 * グリッド内のデータの表示を制御します。
+			 * 上の行とitemCodeが同じときは記号以外の項目は表示しない。
+			 * @param obj グリッドに格納されたオブジェクト（MBcsignDTO）
+			 * @param column グリッドの列
+			 * @return グリッドに表示される文字列
+			 */
+			protected function grid_labelFunction(obj:Object, column:AdvancedDataGridColumn):String
+			{
+				var dto:MBcsignDTO = MBcsignDTO(obj);
+				var rowNum:int = acGrid.getItemIndex(dto);
+				var prevRow:MBcsignDTO;
+				if (rowNum > 0)
+				{
+					prevRow = acGrid.getItemAt(rowNum - 1) as MBcsignDTO;
+				}
+
+				if (rowNum == 0 || dto.itemCode != prevRow.itemCode)
+				{
+					var label:String;
+					switch(column.headerText) {
+						case "No":
+							label = dto.itemCode.toString();
+							break;
+						case "項目名":
+							label = dto.itemName;
+							break;
+						case "Msg":
+							label = dto.msgDiv ? "■" : "□";
+							break;
+						case "MsgNo-桁目-桁数":
+							label = dto.msgNo + "-" + dto.bcPosition + "-" + dto.bcLength;
+							break;
+						case "左H工程-検査順":
+							label = dto.groupNameL == null ? "" : dto.groupNameL + "-" + dto.groupOrderL;
+							break;
+						case "右H工程-検査順":
+							label = dto.groupNameR == null ? "" : dto.groupNameR + "-" + dto.groupOrderR;
+							break;
+					}
+					return label;
+				}
+				else
+				{
+					return null;
+				}
+			}
+
+			/**
+			 * 左Hグループのソート順を定義します。
+			 */
+			protected function grid_groupL_sortCompareFunction(obj1:Object, obj2:Object):int {
+				var dto1:MBcsignDTO = MBcsignDTO(obj1);
+				var dto2:MBcsignDTO = MBcsignDTO(obj2);
+
+				// グループがNULLのものは後ろに持っていく
+				if (dto1.groupNoL != null && dto2.groupNoL == null) {
+					return -1;
+				} else if (dto1.groupNoL == null && dto2.groupNoL != null) {
+					return 1;
+				}
+				// グループNoの比較
+				if (dto1.groupNoL < dto2.groupNoL) {
+					return -1;
+				} else if (dto2.groupNoL < dto1.groupNoL) {
+					return 1;
+				}
+				// グループ内検査順の比較
+				if (dto1.groupOrderL < dto2.groupOrderL) {
+					return -1;
+				} else if (dto2.groupOrderL < dto1.groupOrderL) {
+					return 1;
+				}
+				// グループが設定されていないものはitemCode順に表示する
+				if (dto1.itemCode < dto2.itemCode) {
+					return -1;
+				} else if (dto2.itemCode < dto1.itemCode) {
+					return 1;
+				}
+				//  指示記号の比較
+				if (dto1.bcSign < dto2.bcSign) {
+					return -1;
+				} else if (dto2.bcSign < dto1.bcSign) {
+					return 1;
+				}
+
+				return 0;
+			}
+
+			/**
+			 * 右Hグループのソート順を定義します。
+			 */
+			protected function grid_groupR_sortCompareFunction(obj1:Object, obj2:Object):int {
+				var dto1:MBcsignDTO = MBcsignDTO(obj1);
+				var dto2:MBcsignDTO = MBcsignDTO(obj2);
+
+				// グループがNULLのものは後ろに持っていく
+				if (dto1.groupNoR != null && dto2.groupNoR == null) {
+					return -1;
+				} else if (dto1.groupNoR == null && dto2.groupNoR != null) {
+					return 1;
+				}
+				// グループNoの比較
+				if (dto1.groupNoR < dto2.groupNoR) {
+					return -1;
+				} else if (dto2.groupNoR < dto1.groupNoR) {
+					return 1;
+				}
+				// グループ内検査順の比較
+				if (dto1.groupOrderR < dto2.groupOrderR) {
+					return -1;
+				} else if (dto2.groupOrderR < dto1.groupOrderR) {
+					return 1;
+				}
+				// グループが設定されていないものはitemCode順に表示する
+				if (dto1.itemCode < dto2.itemCode) {
+					return -1;
+				} else if (dto2.itemCode < dto1.itemCode) {
+					return 1;
+				}
+				//  指示記号の比較
+				if (dto1.bcSign < dto2.bcSign) {
+					return -1;
+				} else if (dto2.bcSign < dto1.bcSign) {
+					return 1;
+				}
+
+				return 0;
+			}
+
+			/**
+			 * グリッド内の項目の編集時の処理。
+			 * 固定検査項目の記号欄を制御します。
+			 */
+			protected function grid_itemEditBeginHandler(event:AdvancedDataGridEvent):void
+			{
+				// 2016/02/24 DA upd start
+				var mBcsignDTO:MBcsignDTO = MBcsignDTO(event.itemRenderer.data);
+
+				// 固定検査項目の記号欄は編集できない
+				if ((event.columnIndex == 3 && !mBcsignDTO.msgDiv) || mBcsignDTO.reserveFlag == "1" || mBcsignDTO.reserveFlag == "2")
+				{
+					event.preventDefault();
+				}
+				// 削除された行
+				if (mBcsignDTO.sopDeleteFlag == "1")
+				{
+					event.preventDefault();
+				}
+				// 2016/02/24 DA upd end
+			}
+
+
+			/**
+			 * 終了ボタン押下時の処理。
+			 */
+			protected function btnExit_clickHandler(event:MouseEvent):void
+			{
+				// 本番マスタ選択時は確認不要
+				// 2016/02/24 DA upd start
+				if (MstSelectEvent.isReal(selectMst)) {
+				// 2016/02/24 DA upd end
+				//if (selectMst == 1) {
+					// Browserを閉じる
+					close();
+					return;
+				}
+
+				// 変更有無チェック
+				if (updateExists(acGrid)) {
+					// 編集あり
+					Alert.show("変更が保存されていません。終了してもよろしいですか？",
+						TITLE,
+						Alert.OK | Alert.CANCEL, this,
+						function(event:CloseEvent):void {
+							if (event.detail == Alert.OK) {
+								close();
+								return;
+							}
+						},
+						// 2016/08/29 DA ins start
+						null,
+						Alert.CANCEL
+						// 2016/08/29 DA ins end
+					);
+					return;
+				}
+
+				// メニュー画面に戻る
+				close();
+			}
+
+			/**
+			 * 工程名取得完了Event。
+			 * 工程の検索条件を初期化する
+			 */
+			protected function srvGroup_resultHandler(event:ResultEvent):void
+			{
+				var groupNames:IList = srvGroup.getMGroupNames.lastResult as IList;
+				groupNames.addItemAt( "工程なし", 0);
+				groupNames.addItemAt( "全て", 0);
+
+				// 工程ドロップダウンリストにセット
+				ddlGroup.dataProvider = groupNames;
+
+				// 「全て」を選択状態にする
+				ddlGroup.selectedIndex = 0;
+			}
+
+			/**
+			 * グリッド上のデータにマウスが乗ったときの処理。
+			 */
+			protected function grid_itemRollOverHandler(event:ListEvent):void
+			{
+				// マウスカーソルの乗っている行を保持しておく。
+				// 右クリックで使用する
+				rmenuIndex = event.rowIndex;
+				// 2014/04/07 DA ins start
+				grid.selectedIndex = rmenuIndex;
+				// 2014/04/07 DA ins end
+			}
+
+
+			/**
+			 * 指定された検査項目に紐付く指示記号の仮マスタ本番登録を行います。
+			 */
+			public function masterRegist(data:MBcsignDTO):void
+			{
+				// 編集の未保存チェック
+				var updExists:Boolean = false;
+				for each (var row:MBcsignDTO in acGrid)
+				{
+					// editDivプロパティをチェック
+					if (row.itemCode == data.itemCode && row.editDiv != null)
+					{
+						updExists = true;
+						break;
+					}
+				}
+
+				// 削除の未保存チェック
+				for each (var row2:MBcsignDTO in removedRows)
+				{
+					// editDivプロパティをチェック
+					if (row2.itemCode == data.itemCode)
+					{
+						updExists = true;
+						break;
+					}
+				}
+
+				if (updExists)
+				{
+					Alert.show("編集中のため本番登録できません。先に保存してください。", TITLE);
+				}
+				else
+				{
+					// 指定された項目のみ本番登録
+					srvMstRegist.tempMstRegist(editBctype, "3", data.itemCode, false);
+				}
+			}
+
+
+			protected function tempMstRegist_resultHandler(event:ResultEvent):void
+			{
+				if (event.result == 0)
+				{
+					Alert.show("仮マスタ本番登録を完了しました。", TITLE);
+				}
+				else
+				{
+					Alert.show("仮マスタ本番登録に失敗しました。", TITLE);
+				}
+			}
+
+			// 2016/02/24 DA ins start
+			/**
+			 * 一括選択ボタン押下時の処理
+			 */
+			protected function btnSelectAll_clickHandler(event:MouseEvent):void
+			{
+				for (var loop_cnt:int =0;loop_cnt < this.acGrid.length; loop_cnt++) {
+					var data:MBcsignDTO = this.acGrid[loop_cnt];
+					data.selectFlag = "1";
+				}
+
+			}
+
+			/**
+			 * 一括選択解除ボタン押下時の処理
+			 */
+			protected function btnClearSelection_clickHandler(event:MouseEvent):void
+			{
+				for (var loop_cnt:int =0;loop_cnt < this.acGrid.length; loop_cnt++) {
+					var data:MBcsignDTO = this.acGrid[loop_cnt];
+					data.selectFlag = "0";
+				}
+
+			}
+
+			/**
+			 * 予約情報の表示処理
+			 */
+			protected function grid_reserveLabelFunction(obj:MBcsignDTO, column:AdvancedDataGridColumn):String
+			{
+				var result:String = "";
+
+				if (obj.reserveFlag == '4') {
+					//予約フラグが4の場合、非表示にする
+					result = "";
+				}
+				else {
+					if(obj.reserveDate != null && obj.reserveMUser != null) {
+						var formatter:DateFormatter = new DateFormatter();
+						formatter.formatString = 'YYYY/MM/DD JJ:NN';
+						result = formatter.format(obj.reserveDate) + " " + obj.reserveMUser.userName;
+					}
+				}
+
+				return result;
+			}
+
+			/**
+			 * 車種/工程の選択処理
+			 */
+			protected function ddlVehicleGroup_changeHandler(event:IndexChangeEvent):void
+			{
+				if(this.ddlVehicle.selectedIndex == -1 || this.ddlVehicle.selectedItem == "") {
+					return;
+				}
+
+				if(this.ddlGroup.selectedIndex == -1 || this.ddlGroup.selectedItem == "") {
+					return;
+				}
+
+				var bctype:String;
+
+				// 選択された車種を取得
+				bctype = (ddlVehicle.selectedItem as MVehicle).bctype;
+
+				// グループドロップダウンリスト選択状態取得
+				if( ddlGroup.selectedIndex==0 ){
+					// 項目検索条件 -> 全表示
+					srv.getMsgNoList(selectMst, null, bctype, "_all groups", null, null, null, null);
+				} else if (ddlGroup.selectedIndex==1) {
+					// 項目検索条件 -> グループなしのみ
+					srv.getMsgNoList(selectMst, null, bctype, "_no groups", null, null, null, null);
+				} else {
+					// グループ選択
+					var groupName:String = ddlGroup.selectedItem as String;
+					srv.getMsgNoList(selectMst, null, bctype, groupName, null, null, null, null);
+				}
+
+				// 画像一覧出力のフラグを取得
+				srv.getImageOutputFlag(bctype, this.loginUser);
+			}
+
+			/**
+			 * MsgNo一覧取得の成功時の処理
+			 */
+			protected function srv_getMsgNoList_resultHandler(event:ResultEvent):void
+			{
+				this.cmbMsgNo.dataProvider = event.result as IList;
+				this.cmbMsgNo.enabled = true;
+			}
+
+			/**
+			 * 画像一覧出力ボタン押下時の処理
+			 */
+			protected function btnImageListOutput_clickHandler(event:MouseEvent):void
+			{
+				var imageOutputFlag:Boolean;
+				var bctype:String;
+
+				if(this.ddlVehicle.selectedIndex < 0) {
+					Alert.show(resourceManager.getString('message','msg00045'), TITLE);
+					return;
+				}
+
+				if( ddlGroup.selectedIndex==0 || ddlGroup.selectedIndex==1){
+					// 項目検索条件 -> 全表示
+					// 項目検索条件 -> グループなしのみ
+					Alert.show(resourceManager.getString('message','msg00046'), TITLE);
+					return;
+				}
+
+				// 画像出力権限チェック
+				if(this.imageOutputFlag == false) {
+					Alert.show(resourceManager.getString('message','msg00011'), TITLE);
+					return;
+				}
+
+				// 変更有無チェック
+				if (updateExists(acGrid)) {
+					// 編集あり
+					// 変更が保存されていません。画像一覧出力すると変更が破棄されます。よろしいですか？
+					Alert.show(resourceManager.getString('message','msg00012'), TITLE, Alert.OK | Alert.CANCEL, this,
+						function(event:CloseEvent):void {
+							if (event.detail == Alert.OK) {
+								this.imageListOutput();
+							}
+						},
+						// 2016/08/29 DA ins start
+						null,
+						Alert.CANCEL
+						// 2016/08/29 DA ins end
+					);
+				} else {
+					this.imageListOutput();
+				}
+			}
+
+			/**
+			 * 画像一覧出力権限を取得
+			 */
+			protected function srv_getImageOutputFlag_resultHandler(event:ResultEvent):void
+			{
+				// 画像一覧出力権限を取得
+				if(event.result == null) {
+					this.imageOutputFlag = false;
+				} else {
+					this.imageOutputFlag = event.result;
+				}
+			}
+
+
+
+			public function imageListOutput():void
+			{
+				var bctype:String = (ddlVehicle.selectedItem as MVehicle).bctype;
+
+				var groupName:String
+				if( ddlGroup.selectedIndex==0 ){
+					// 項目検索条件 -> 全表示
+					groupName = "_all groups";
+				} else if (ddlGroup.selectedIndex==1) {
+					// 項目検索条件 -> グループなしのみ
+					groupName = "_no groups";
+				} else {
+					// グループ選択
+					groupName = ddlGroup.selectedItem as String;
+				}
+
+				var msgNo:String = this.cmbMsgNo.textInput.text;
+				var reserveFlag:Boolean = this.chkReserve.selected;
+
+				var vars:URLVariables = new URLVariables();
+				vars.selectMst = selectMst;
+				vars.mstVersion = "";
+				vars.bctype = bctype;
+				vars.groupName = groupName;
+				vars.itemCode = "";
+				vars.bcSign = "";
+				vars.msgNo = msgNo;
+//				vars.reserveFlag = reserveFlag;
+				vars.reserveFlag = false;
+				vars.searchFlag = "1";
+				vars.loginUser = loginUser;
+
+				// 画像一覧デフォルトファイル名の生成
+				var defaultFileName:String = resourceManager.getString('resource','imageListDefaultFile');
+				var startDate:int = defaultFileName.indexOf("[");
+				var endDate:int = defaultFileName.indexOf("]");
+				if (startDate != -1 && endDate != -1) {
+					var beforeString:String = "";
+					var afterString:String = "";
+					var formatter:DateFormatter = new DateFormatter();
+
+					beforeString = defaultFileName.substring(0, startDate);
+					formatter.formatString = defaultFileName.substring(startDate + 1, endDate);
+					if (endDate + 1 < defaultFileName.length) {
+						afterString = defaultFileName.substring(endDate + 1);
+					}
+
+					defaultFileName = beforeString + formatter.format(new Date()) + afterString;
+				}
+
+				var downloadURL:URLRequest = new URLRequest();
+				downloadURL.url = "../MBcsign/imageListOutput";
+				downloadURL.data = vars;
+				file = new FileReference();
+				configureListeners(file);
+				file.download(downloadURL, defaultFileName);
+			}
+
+			private function configureListeners(dispatcher:IEventDispatcher):void {
+				dispatcher.addEventListener(Event.CANCEL, cancelHandler);
+				dispatcher.addEventListener(Event.COMPLETE, completeHandler);
+				dispatcher.addEventListener(IOErrorEvent.IO_ERROR, exceptionErrorHandler);
+			}
+
+			//ダウンロードできないとき
+			private function exceptionErrorHandler(event:Event):void {
+				// ダウンロードに失敗しました。
+				Alert.show(resourceManager.getString('message','msg00050'), TITLE);
+			}
+
+			//キャンセルしたとき
+			private function cancelHandler(event:Event):void {
+
+			}
+
+			//アップロード完了したとき
+			private function completeHandler(event:Event):void {
+				var bctype:String = (ddlVehicle.selectedItem as MVehicle).bctype;
+				var groupName:String = this.ddlGroup.selectedItem;
+				var msgNo:String = this.cmbMsgNo.textInput.text;
+				var fileName:String = file.name;
+
+				// サーバーのログ出力
+				srv.imageListOutputLog(this.selectMst, null, bctype, groupName, msgNo, this.loginUser, fileName);
+
+				// ダウンロードが完了しました。
+				Alert.show(resourceManager.getString('message','msg00049'), TITLE);
+			}
+
+			/**
+			 * 本番登録ボタン押下時の処理。
+			 */
+			protected function btnRealReg_clickHandler(event:MouseEvent):void
+			{
+				this.registType = MasterRegistEvent.RealRegist;
+				// 表示位置を保持する
+				this.gridScrollPosition = this.grid.verticalScrollPosition;
+
+				// 項目が未選択のチェック
+				selectSignCodeArray = new Array();
+				selectBcsignArray = new ArrayCollection();
+				for (var loop_cnt:int　=　0;　loop_cnt < this.acGrid.length; loop_cnt　++) {
+					var data:MBcsignDTO = this.acGrid[loop_cnt];
+					if (data.selectFlag == "1"){
+						selectSignCodeArray.push(data.signCode);
+						selectBcsignArray.addItem(data);
+					}
+				}
+				if (selectBcsignArray.length < 1){
+					// 項目が未選択
+					Alert.show(resourceManager.getString('message','msg00017'), TITLE);
+					return;
+				}
+
+				// 変更有無チェック
+				if (updateExists(acGrid)) {
+					// 編集あり
+					Alert.show(resourceManager.getString('message','msg00014'), TITLE);
+					return;
+				}
+
+				// 車種を取得
+				selectBctype = (this.ddlVehicle.selectedItem as MVehicle).bctype
+				srvRegist.getBcsignReserveStatus(selectMst, selectBctype, selectSignCodeArray);
+			}
+
+			/**
+			 * 本番登録予約ボタン押下時の処理。
+			 */
+			protected function btnRealRegReserve_clickHandler(event:MouseEvent):void
+			{
+				this.registType = MasterRegistEvent.Reserve;
+				// 表示位置を保持する
+				this.gridScrollPosition = this.grid.verticalScrollPosition;
+
+				// 項目が未選択のチェック
+				var flg:Boolean = true;
+				selectSignCodeArray = new Array();
+				selectBcsignArray = new ArrayCollection();
+				for (var loop_cnt:int　=　0;　loop_cnt < this.acGrid.length; loop_cnt　++) {
+					var data:MBcsignDTO = this.acGrid[loop_cnt];
+					if (data.selectFlag == "1"){
+						selectSignCodeArray.push(data.signCode);
+						selectBcsignArray.addItem(data);
+
+						if (data.reserveFlag == "1"){
+							flg = false;
+						}
+					}
+				}
+				if (selectBcsignArray.length < 1){
+					// 項目が未選択
+					Alert.show(resourceManager.getString('message','msg00018'), TITLE);
+					return;
+				}
+				if (!flg){
+					// 予約している項目が選択
+					Alert.show(resourceManager.getString('message','msg00040'), TITLE);
+					return;
+				}
+
+				// 変更有無チェック
+				if (updateExists(acGrid)) {
+					// 編集あり
+					Alert.show(resourceManager.getString('message','msg00014'), TITLE);
+					return;
+				}
+
+				// 車種を取得
+				selectBctype = (this.ddlVehicle.selectedItem as MVehicle).bctype
+				srvRegist.getBcsignReserveStatus(selectMst, selectBctype, selectSignCodeArray);
+			}
+
+			/**
+			 * 通信エラーの場合(Data取得Error Event)
+			 */
+			private function onGetBcsignReserveStatusGetFault(e:FaultEvent):void
+			{
+				Alert.show(resourceManager.getString('message','msg00034'), TITLE);
+			}
+
+			/**
+			 * 予約中チェック
+			 *
+			 */
+			protected function onGetBcsignReserveStatus_resultHandler(event:ResultEvent):void
+			{
+				// サーバー処理の呼出が出来ませんでした
+				if (event.result==null) {
+					Alert.show(resourceManager.getString('message','msg00033'), TITLE);
+				}
+				else
+				{
+					var strResult:String = event.result as String;
+					if (strResult == null){
+						// 予約中の従業員あり
+						if (this.registType == MasterRegistEvent.RealRegist){
+							// 本番登録
+							Alert.show(StringUtil.substitute(resourceManager.getString('message','msg00043'), event.result), TITLE);
+						}
+						else if (this.registType == MasterRegistEvent.Reserve){
+							// 本番登録予約
+							Alert.show(StringUtil.substitute(resourceManager.getString('message','msg00005'), event.result), TITLE);
+						}
+					}
+					else {
+						if(strResult == "1")
+						{
+							// 予約実行中
+							if (this.registType == MasterRegistEvent.RealRegist){
+								// 本番登録
+								Alert.show(resourceManager.getString('message','msg00004'), TITLE);
+							}
+							else if (this.registType == MasterRegistEvent.Reserve){
+								// 本番登録予約
+								Alert.show(resourceManager.getString('message','msg00041'), TITLE);
+							}
+						}
+						else
+						{
+							if (this.registType == MasterRegistEvent.RealRegist){
+								// 本番登録
+								// 確認ダイアログを表示
+								var msg:String;
+								var mBcsignDTO:MBcsignDTO = selectBcsignArray[0];
+								if (selectBcsignArray.length > 1)
+								{
+									// 選択した指示記号の件数が、2件以上の場合
+									msg = StringUtil.substitute(resourceManager.getString('message','msg00036'), mBcsignDTO.itemCode, mBcsignDTO.itemName, mBcsignDTO.msgNo, selectBcsignArray.length - 1);
+								}
+								else
+								{
+									// 選択した指示記号の件数が、1件の場合
+									msg = StringUtil.substitute(resourceManager.getString('message','msg00035'), mBcsignDTO.itemCode, mBcsignDTO.itemName, mBcsignDTO.msgNo);
+								}
+
+								// 確認ダイアログを表示する
+								Alert.show(msg, TITLE, Alert.OK | Alert.CANCEL, this,
+									function(event:CloseEvent):void {
+										if (event.detail == Alert.OK) {
+											srvRegist.registBcsignRealReg(loginUser, selectMst, selectBctype, selectSignCodeArray);
+										}
+									},
+									// 2016/08/29 DA ins start
+									null,
+									Alert.CANCEL
+									// 2016/08/29 DA ins end
+								);
+							}
+							else if (this.registType == MasterRegistEvent.Reserve){
+
+								// 本番登録予約
+								var dialog:RegistReserveDate = PopUpManager.createPopUp(this,RegistReserveDate,true) as RegistReserveDate;
+								dialog.addEventListener(CloseEvent.CLOSE,closeReserveDateWindow);
+								dialog.setMstVer(this.selectMst);
+								dialog.setBctype(this.selectBctype);
+								dialog.setItemArray(this.selectSignCodeArray);
+								dialog.setUserCode(this.loginUser);
+
+								PopUpManager.centerPopUp(dialog);
+							}
+						}
+					}
+				}
+			}
+
+			/**
+			 * 通信エラーの場合(Data取得Error Event)
+			 */
+			private function onRegistBcsignRealRegGetFault(e:FaultEvent):void
+			{
+				Alert.show("仮マスタ本番登録処理でエラーが発生しました。", TITLE);
+			}
+
+			/**
+			 * 仮マスタ本番登録処理
+			 *
+			 */
+			protected function onRegistBcsignRealReg_resultHandler(event:ResultEvent):void
+			{
+				// サーバー処理の呼出が出来ませんでした
+				if (event.result==null) {
+					Alert.show(resourceManager.getString('message','msg00033'), TITLE);
+				}
+				else
+				{
+					var strResult:String = event.result as String;
+					if(strResult == "1")
+					{
+						// 予約実行中
+						Alert.show(resourceManager.getString('message','msg00004'), TITLE);
+					}
+					else if (strResult == "2")
+					{
+						Alert.show("仮マスタ本番登録処理でエラーが発生しました。", TITLE);
+					}
+					else if (strResult == "4") {
+						// マスタが存在しない
+						Alert.show(resourceManager.getString('message','msg00053'), TITLE);
+					}
+					else
+					{
+						itemDataGet();
+						Alert.show("仮マスタ本番登録を完了しました。", TITLE);
+					}
+				}
+			}
+
+			/**
+			 * 入力ウィンドウが閉じられたときのイベント処理
+			 */
+			public function closeReserveDateWindow(e:CloseEvent):void{
+				//OKが押下された場合だけ処理する。
+				if (e.detail != 1) {
+					return;
+				}
+				// 画面を再表示する
+				itemDataGet();
+				// MSG:仮マスタ本番登録の予約をしました。
+				Alert.show(resourceManager.getString('message','msg00042'), TITLE);
+			}
+
+			/**
+			 * 予約解除ボタン押下時の処理。
+			 */
+			protected function btnReserveCancel_clickHandler(event:MouseEvent):void
+			{
+				this.registType = MasterRegistEvent.ReserveCancel;
+				// 表示位置を保持する
+				this.gridScrollPosition = this.grid.verticalScrollPosition;
+
+				// 項目が未選択のチェック
+				var flg:Boolean = true;
+				selectSignCodeArray = new Array();
+				selectBcsignArray = new ArrayCollection();
+				for (var loop_cnt:int　=　0;　loop_cnt < this.acGrid.length; loop_cnt　++) {
+					var data:MBcsignDTO = this.acGrid[loop_cnt];
+					if (data.selectFlag == "1"){
+						selectSignCodeArray.push(data.signCode);
+						selectBcsignArray.addItem(data);
+
+						if (data.reserveFlag != "1"){
+							flg = false;
+						}
+					}
+				}
+				if (selectBcsignArray.length < 1){
+					// 項目が未選択
+					Alert.show(resourceManager.getString('message','msg00019'), TITLE);
+					return;
+				}
+				if (!flg){
+					// 予約している項目が選択
+					Alert.show(resourceManager.getString('message','msg00010'), TITLE);
+					return;
+				}
+
+				// 変更有無チェック
+				if (updateExists(acGrid)) {
+					// 編集あり
+					Alert.show(resourceManager.getString('message','msg00014'), TITLE);
+					return;
+				}
+
+				// 車種を取得
+				selectBctype = (this.ddlVehicle.selectedItem as MVehicle).bctype
+				srvRegist.isReservedMBcsignSignOnly(selectMst, selectBctype, selectSignCodeArray);
+			}
+
+			/**
+			 * 通信エラーの場合(Data取得Error Event)
+			 */
+			private function onIsReservedMBcsignSignOnlyGetFault(e:FaultEvent):void
+			{
+				Alert.show(resourceManager.getString('message','msg00038'), TITLE);
+			}
+
+			/**
+			 * 指示記号の予約中チェック後の処理
+			 */
+			protected function isReservedMBcsignSignOnly_resultHandler(event:ResultEvent):void
+			{
+				// サーバー処理の呼出が出来ませんでした
+				if (event.result==null) {
+					Alert.show(resourceManager.getString('message','msg00033'), TITLE);
+				}
+				else
+				{
+					var bol:Boolean = event.result as Boolean;
+					if(!bol)
+					{
+						// 予約実行中
+						Alert.show(resourceManager.getString('message','msg00010'), TITLE);
+					}
+					else
+					{
+						// 確認ダイアログを表示する
+						Alert.show(resourceManager.getString('message','msg00037'), TITLE, Alert.OK | Alert.CANCEL, this,
+							function(event:CloseEvent):void {
+								if (event.detail == Alert.OK) {
+									srvRegist.updateBcsignReserveCancel(loginUser, selectMst, selectBctype, selectSignCodeArray);
+								}
+							},
+							// 2016/08/29 DA ins start
+							null,
+							Alert.CANCEL
+							// 2016/08/29 DA ins end
+						);
+					}
+				}
+			}
+
+			/**
+			 * 通信エラーの場合(Data取得Error Event)
+			 */
+			private function onUpdateBcsignReserveCancelGetFault(e:FaultEvent):void
+			{
+				Alert.show(resourceManager.getString('message','msg00038'), TITLE);
+			}
+
+			/**
+			 * 予約解除処理
+			 *
+			 */
+			protected function onUpdateBcsignReserveCancel_resultHandler(event:ResultEvent):void
+			{
+				// サーバー処理の呼出が出来ませんでした
+				if (event.result==null) {
+					Alert.show(resourceManager.getString('message','msg00033'), TITLE);
+				}
+				else
+				{
+					var strResult:String = event.result as String;
+					if(strResult == "1")
+					{
+						// 予約実行中
+						Alert.show(resourceManager.getString('message','msg00010'), TITLE);
+					}
+					else
+					{
+						itemDataGet();
+						Alert.show(resourceManager.getString('message','msg00039'), TITLE);
+					}
+				}
+			}
+
+			/**
+			 * コンポーネントの制御をする
+			 */
+			public function enabledComponent():void
+			{
+				if (MUserUtils.isAdministrator(this.loginUserInfo)) {
+					// マスタ管理者
+					if (MstSelectEvent.isReal(selectMst)) {
+						this.btnSelectAll.enabled = false;
+						this.btnClearSelection.enabled = false;
+						this.grid.editable = "false";
+						this.btnSaveData.enabled = false;
+						this.btnRealReg.enabled = false;
+						this.btnRealRegReserve.enabled = false;
+						this.btnReserveCancel.enabled = false;
+					} else {
+						this.btnSelectAll.enabled = true;
+						this.btnClearSelection.enabled = true;
+						this.grid.editable = "true";
+
+						this.btnSaveData.enabled = true;
+						this.btnRealReg.enabled = true;
+						this.btnRealRegReserve.enabled = true;
+						this.btnReserveCancel.enabled = true;
+					}
+
+				} else {
+					// 以外
+					this.btnSelectAll.enabled = false;
+					this.btnClearSelection.enabled = false;
+					this.grid.editable = "false";
+					this.btnSaveData.enabled = false;
+					this.btnRealReg.enabled = false;
+					this.btnRealRegReserve.enabled = false;
+					this.btnReserveCancel.enabled = false;
+				}
+			}
+
+			// 2016/02/24 DA ins end
+			// 2016/02/24 DA ins start
+			/**
+			 * スクロール時に正しいデータを表示する
+			 */
+			protected function grid_scrollHandler(event:ScrollEvent):void
+			{
+				this.gridScrollPosition = this.grid.verticalScrollPosition;
+			}
+			// 2016/02/24 DA ins end
+
+		]]>
+	</fx:Script>
+
+	<fx:Declarations>
+		<s:RemoteObject id="srv" destination="MBcsignService">
+			<s:method name="update" result="srv_update_resultHandler(event)" />
+			<!-- 2016/02/24 DA ins start -->
+			<s:method name="getMsgNoList" result="srv_getMsgNoList_resultHandler(event)" />
+			<s:method name="getImageOutputFlag" result="srv_getImageOutputFlag_resultHandler(event)" />
+			<!-- 2016/02/24 DA ins end -->
+			<!-- 2016/08/26 DA ins start -->
+			<s:method name="isSearchMBcsign" result="isSearchMBcsign_resultHandler(event)"/>
+			<s:method name="getDiffMBcsign" result="getDiffMBcsign_resultHandler(event)"/>
+			<!-- 2016/08/26 DA ins end -->
+			<!-- 2016/09/26 DA ins start -->
+			<s:method name="getCheckBcsignDelete" fault="onGetCheckBcsignDeleteFault(event)" result="getCheckBcsignDelete_resultHandler(event)" />
+			<!-- 2016/09/26 DA ins end -->
+		</s:RemoteObject>
+		<s:RemoteObject id="srvVehicle" destination="MVehicleService" />
+
+		<s:RemoteObject id="srvGroup" destination="MGroupService" result="srvGroup_resultHandler(event)"/>
+
+		<s:RemoteObject id="srvMstRegist" destination="storedFunctionService">
+			<s:method name="tempMstRegist" result="tempMstRegist_resultHandler(event)" />
+		</s:RemoteObject>
+
+		<!-- 2016/02/24 DA ins start -->
+		<s:RemoteObject id="srvRegist" destination="mstRegistService">
+			<s:method name="isReservedMVehicle" result="isReservedMVehicle_resultHandler(event)" />
+			<s:method name="isReservedMBcsignSignOnly" fault="onIsReservedMBcsignSignOnlyGetFault(event)" result="isReservedMBcsignSignOnly_resultHandler(event)" />
+			<s:method name="getBcsignReserveStatus" fault="onGetBcsignReserveStatusGetFault(event)"  result="onGetBcsignReserveStatus_resultHandler(event)"/>
+			<s:method name="registBcsignRealReg" fault="onRegistBcsignRealRegGetFault(event)"  result="onRegistBcsignRealReg_resultHandler(event)"/>
+			<s:method name="updateBcsignReserveCancel" fault="onUpdateBcsignReserveCancelGetFault(event)"  result="onUpdateBcsignReserveCancel_resultHandler(event)"/>
+			<s:method name="isReservedVehicleSign" fault="onIsReservedVehicleSignFault(event)" result="isReservedVehicleSign_resultHandler(event)" />
+		</s:RemoteObject>
+		<!-- 2016/02/24 DA ins end -->
+
+		<!-- 2016/02/24 DA ins start -->
+		<!--<s:ArrayCollection id="acGrid" collectionChange="acGrid_collectionChangeHandler(event)" list="{srv.getMBcsignDTO.lastResult}" />-->
+		<s:ArrayCollection id="acGrid" collectionChange="acGrid_collectionChangeHandler(event)" list="{grid.dataProvider as IList}" />
+		<!-- 2016/02/24 DA ins end -->
+		<s:ArrayCollection id="acDdl"  list="{ddlGroup.dataProvider as IList}" />
+	</fx:Declarations>
+
+	<s:HGroup width="100%" height="24" verticalAlign="middle" fontFamily="ＭＳ ゴシック">
+		<s:Label text="指示記号マスタメンテナンス" fontSize="14" fontWeight="bold"/>
+	</s:HGroup>
+	<s:HGroup width="100%" height="24">
+		<s:HGroup width="50%" height="24" textAlign="left" verticalAlign="middle">
+			<s:Label text="車種："/>
+			<s:DropDownList id="ddlVehicle" dataProvider="{srvVehicle.getMVehicle.lastResult}" labelField="vehicleName" change="ddlVehicleGroup_changeHandler(event)"></s:DropDownList>
+			<mx:Spacer width="16" height="100%"/>
+			<s:Label text="工程："/>
+			<s:DropDownList id="ddlGroup" dataProvider="{srvGroup.getMGroupNames.lastResult}" width="180" change="ddlVehicleGroup_changeHandler(event)"></s:DropDownList>
+
+			<!-- 2016/02/24 DA ins start -->
+			<!-- MsgNo -->
+			<s:Label text="{resourceManager.getString('resource','cli1200001')}"/>
+			<s:ComboBox id="cmbMsgNo" enabled="false" width="60" />
+
+			<!-- 予約中 -->
+			<s:CheckBox id="chkReserve" label="{resourceManager.getString('resource','cli1200002')}" />
+			<!-- 2016/02/24 DA ins end -->
+
+			<mx:Spacer width="16" height="100%"/>
+			<s:Button label="検索" height="30" id="btnGetData" click="btnGetData_clickHandler(event)" fontSize="12"/>
+
+			<!-- 2016/02/24 DA ins start -->
+			<!-- 一括選択 -->
+			<s:Button label="{resourceManager.getString('resource','cli1200003')}" height="30" id="btnSelectAll" click="btnSelectAll_clickHandler(event)" fontSize="12"/>
+
+			<!-- 一括選択解除 -->
+			<s:Button label="{resourceManager.getString('resource','cli1200004')}" height="30" id="btnClearSelection" click="btnClearSelection_clickHandler(event)" fontSize="12"/>
+
+			<!-- 画像一覧出力 -->
+			<s:Button label="{resourceManager.getString('resource','cli1200005')}" height="30" id="btnImageListOutput" click="btnImageListOutput_clickHandler(event)" fontSize="12"/>
+
+			<!-- 本番マスタ差異確認 -->
+			<s:Button label="{resourceManager.getString('resource','cli1200006')}" height="30" id="btnMasterDiff" click="btnMasterDiff_clickHandler(event)" fontSize="12" enabled="false"/>
+			<!-- 2016/02/24 DA ins end -->
+		</s:HGroup>
+		<s:HGroup width="50%" height="24" fontFamily="ＭＳ ゴシック" horizontalAlign="right" verticalAlign="middle">
+			<s:Label text="マスタ選択" textAlign="right"/>
+			<s:Label text="仮" fontWeight="bold" id="selectMst_Label"/>
+		</s:HGroup>
+	</s:HGroup>
+
+	<mx:AdvancedDataGrid id="grid" designViewDataType="flat" dataProvider="{srv.getMBcsignDTO.lastResult}" right="12" left="20" top="20" bottom="60"
+						 editable="true" width="100%" height="100%" sortExpertMode="true" itemEditBegin="grid_itemEditBeginHandler(event)"
+						 itemRollOver="grid_itemRollOverHandler(event)" draggableColumns="false"
+						 scroll="grid_scrollHandler(event)">
+		<mx:columns>
+			<mx:AdvancedDataGridColumn id="No" headerText="No" editable="false" width="33" backgroundColor="#C4C4C4" textAlign="left" sortable="false"  labelFunction="grid_labelFunction"/>
+			<mx:AdvancedDataGridColumn headerText="項目名" labelFunction="grid_labelFunction" editable="false" backgroundColor="#C4C4C4"  sortable="false" width="120"/>
+			<mx:AdvancedDataGridColumn headerText="MsgNo-桁目-桁数" labelFunction="grid_labelFunction" editable="false" backgroundColor="#C4C4C4" sortable="false" width="80"/>
+			<!--<mx:AdvancedDataGridColumn headerText="記号" dataField="bcSign" imeMode="{IMEConversionMode.JAPANESE_KATAKANA_HALF}" width="30" sortable="false">-->
+				<mx:AdvancedDataGridColumn headerText="記号" id="kaksks" dataField="bcSign" imeMode="{IMEConversionMode.JAPANESE_KATAKANA_HALF}" width="80" sortable="false">
+				<mx:itemRenderer>
+					<fx:Component>
+						<mx:AdvancedDataGridItemRenderer dataChange="advanceddatagriditemrenderer1_dataChangeHandler(event)">
+							<fx:Script>
+								<![CDATA[
+									import mx.events.FlexEvent;
+									import mx.resources.ResourceManager;
+									import mx.resources.IResourceManager;
+
+									protected function advanceddatagriditemrenderer1_dataChangeHandler(event:FlexEvent):void
+									{
+										// 2016/02/24 DA ins start
+										var rm:IResourceManager = ResourceManager.getInstance();
+										if (data != null && data.bcSignUnMat != null && data.bcSignUnMat == "true") {
+											AdvancedDataGridItemRenderer(event.currentTarget).background = true;
+											AdvancedDataGridItemRenderer(event.currentTarget).backgroundColor = rm.getInt('resource','differenceDisplayColor');
+
+										} else if (data != null && data.sopDeleteFlag == "1") {
+											AdvancedDataGridItemRenderer(event.currentTarget).background = true;
+											AdvancedDataGridItemRenderer(event.currentTarget).backgroundColor = rm.getInt('resource','bcsignSopDeleteColor');
+										}
+										// 2016/02/24 DA ins end
+										else if (data != null && !data.msgDiv)
+										{
+											AdvancedDataGridItemRenderer(event.currentTarget).background = true;
+											AdvancedDataGridItemRenderer(event.currentTarget).backgroundColor = 0xC4C4C4;
+										}
+										else if (data != null && data.editDiv != null)
+										{
+											AdvancedDataGridItemRenderer(event.currentTarget).background = true;
+											AdvancedDataGridItemRenderer(event.currentTarget).backgroundColor = 0xFFB6C1;
+										}
+										else
+										{
+											AdvancedDataGridItemRenderer(event.currentTarget).background = false;
+										}
+									}
+								]]>
+							</fx:Script>
+						</mx:AdvancedDataGridItemRenderer>
+					</fx:Component>
+				</mx:itemRenderer>
+			</mx:AdvancedDataGridColumn>
+
+			<!-- 2016/02/24 DA upd start -->
+<!--		<mx:AdvancedDataGridColumn headerText="検査内容" dataField="signContents" imeMode="{IMEConversionMode.JAPANESE_HIRAGANA}" sortable="false" width="150" itemRenderer="jp.co.ctc.components.BackgroundColorItemRenderer"> -->
+			<mx:AdvancedDataGridColumn headerText="検査内容" dataField="signContents" imeMode="{IMEConversionMode.JAPANESE_HIRAGANA}" sortable="false" width="150">
+			<!-- 2016/02/24 DA upd end -->
+
+				<!-- 2016/02/24 DA ins start -->
+				<mx:itemRenderer>
+					<fx:Component>
+						<mx:AdvancedDataGridItemRenderer dataChange="signContents_dataChangeHandler(event)">
+							<fx:Script>
+								<![CDATA[
+									import flash.sampler.getInvocationCount;
+									import mx.collections.ArrayCollection;
+									import mx.controls.advancedDataGridClasses.AdvancedDataGridItemRenderer;
+									import mx.events.FlexEvent;
+									import mx.resources.IResourceManager;
+									import mx.resources.ResourceManager;
+
+									/*
+									* 検査内容の値が違う場合、背景色を変更する
+									*/
+									public function signContents_dataChangeHandler(event:FlexEvent):void {
+										var item:AdvancedDataGridItemRenderer = event.target as AdvancedDataGridItemRenderer;
+										var rm:IResourceManager = ResourceManager.getInstance();
+										if (data != null && data.signContentsUnMat != null && data.signContentsUnMat == "true") {
+											//背景色を黄緑色に設定する
+											item.background = true;
+											item.backgroundColor = rm.getInt('resource','differenceDisplayColor');
+
+										} else if (data != null && data.sopDeleteFlag == "1") {
+											item.background = true;
+											item.backgroundColor = rm.getInt('resource','bcsignSopDeleteColor');
+
+										} else if (data != null && data.editDiv != null && data.editDiv != "M") {
+											// 変更区分がnull、"M"(移動)でなければ背景を赤色
+											item.background = true;
+											item.backgroundColor = 0xFFB6C1;
+										} else {
+											//背景色の色を設定しない
+											item.background = false;
+										}
+									}
+
+								]]>
+							</fx:Script>
+						</mx:AdvancedDataGridItemRenderer>
+					</fx:Component>
+				</mx:itemRenderer>
+				<!-- 2016/02/24 DA ins end -->
+			</mx:AdvancedDataGridColumn>
+
+			<!-- 2016/02/24 DA upd start -->
+<!--		<mx:AdvancedDataGridColumn dataField="dummySign" headerText="ﾀﾞﾐｰ記号" itemRenderer="jp.co.ctc.components.BackgroundColorItemRenderer" sortable="false" width="90"> -->
+			<mx:AdvancedDataGridColumn dataField="dummySign" headerText="ﾀﾞﾐｰ記号" sortable="false" width="90">
+			<!-- 2016/02/24 DA upd end -->
+				<mx:itemEditor>
+					<fx:Component>
+						<mx:TextInput maxChars="100" toolTip="カンマ区切りで入力してください" />
+					</fx:Component>
+				</mx:itemEditor>
+				<!-- 2016/02/24 DA ins start -->
+				<mx:itemRenderer>
+					<fx:Component>
+						<mx:AdvancedDataGridItemRenderer dataChange="dummySign_dataChangeHandler(event)">
+							<fx:Script>
+								<![CDATA[
+									import flash.sampler.getInvocationCount;
+									import mx.collections.ArrayCollection;
+									import mx.controls.advancedDataGridClasses.AdvancedDataGridItemRenderer;
+									import mx.events.FlexEvent;
+									import mx.resources.IResourceManager;
+									import mx.resources.ResourceManager;
+
+									/*
+									* ダミー記号の値が違う場合、背景色を変更する
+									*/
+									public function dummySign_dataChangeHandler(event:FlexEvent):void {
+										var item:AdvancedDataGridItemRenderer = event.target as AdvancedDataGridItemRenderer;
+										var rm:IResourceManager = ResourceManager.getInstance();
+										if (data != null && data.dummySignUnMat != null && data.dummySignUnMat == "true") {
+											//背景色を黄緑色に設定する
+											item.background = true;
+											item.backgroundColor = rm.getInt('resource','differenceDisplayColor');
+
+										} else if (data != null && data.sopDeleteFlag == "1") {
+											item.background = true;
+											item.backgroundColor = rm.getInt('resource','bcsignSopDeleteColor');
+
+										} else if (data != null && data.editDiv != null && data.editDiv != "M") {
+											// 変更区分がnull、"M"(移動)でなければ背景を赤色
+											item.background = true;
+											item.backgroundColor = 0xFFB6C1;
+										} else {
+											//背景色の色を設定しない
+											item.background = false;
+										}
+									}
+
+								]]>
+							</fx:Script>
+						</mx:AdvancedDataGridItemRenderer>
+					</fx:Component>
+				</mx:itemRenderer>
+				<!-- 2016/02/24 DA ins end -->
+			</mx:AdvancedDataGridColumn>
+			<!-- ＰＤＡ画像を上下ランダム表示としたために表示順を設定する意味が無くなったため、項目非表示とする。 -->
+			<mx:AdvancedDataGridColumn headerText="表示順" dataField="signOrder" itemRenderer="jp.co.ctc.components.NumericStepper" editable="false" width="40" sortable="false" visible="false"/>
+			<mx:AdvancedDataGridColumn headerText="画像" editable="false" width="48" sortable="false"
+									   itemRenderer="jp.co.ctc.components.ImageButton" >
+			</mx:AdvancedDataGridColumn>
+
+			<mx:AdvancedDataGridColumn headerText="表示" editable="false" sortable="false" width="48"
+									   itemRenderer="jp.co.ctc.components.ShowImageButton" >
+			</mx:AdvancedDataGridColumn>
+
+			<!-- 2016/02/24 DA del start -->
+			<!-- <mx:AdvancedDataGridColumn headerText="本番登録" editable="false" sortable="false" width="70" itemRenderer="jp.co.ctc.components.BcsignRegistButton" /> -->
+			<!-- 2016/02/24 DA del end -->
+
+			<!-- 2016/02/24 DA ins start -->
+			<!-- 対象 -->
+			<mx:AdvancedDataGridColumn headerText="{resourceManager.getString('resource','cli1200010')}" editable="false" sortable="false" dataField="selectFlag" textAlign="center">
+				<mx:itemRenderer>
+					<fx:Component>
+						<mx:CheckBox dataChange="sel_dataChangeHandler(event)" textAlign="center" selected="{data.selectFlag=='1'}" change="if(this.selected) data.selectFlag='1'; else data.selectFlag='0';" >
+							<fx:Script>
+								<![CDATA[
+									import mx.events.FlexEvent;
+
+									protected function sel_dataChangeHandler(event:FlexEvent):void
+									{
+										if(data == null) {
+											return;
+										}
+										this.enabled = outerDocument.btnRealRegReserve.enabled;
+									}
+								]]>
+							</fx:Script>
+						</mx:CheckBox>
+					</fx:Component>
+				</mx:itemRenderer>
+			</mx:AdvancedDataGridColumn>
+
+			<!-- 予約情報 -->
+			<mx:AdvancedDataGridColumn headerText="{resourceManager.getString('resource','cli1200011')}" dataField="reserveFlag" editable="false" backgroundColor="#C4C4C4" sortable="true" labelFunction="grid_reserveLabelFunction">
+				<mx:itemRenderer>
+					<fx:Component>
+						<mx:Label dataChange="label1_dataChangeHandler(event)">
+							<fx:Script>
+								<![CDATA[
+									import mx.events.FlexEvent;
+
+									protected function label1_dataChangeHandler(event:FlexEvent):void
+									{
+										if(data == null) {
+											return;
+										}
+										if(data.reserveFlag == '3') {
+											this.setStyle("color", resourceManager.getInt('resource','reservationCompletion'));
+										} else {
+											this.setStyle("color", 0);
+										}
+									}
+								]]>
+							</fx:Script>
+						</mx:Label>
+					</fx:Component>
+				</mx:itemRenderer>
+			</mx:AdvancedDataGridColumn>
+			<!-- 2016/02/24 DA ins end -->
+
+			<mx:AdvancedDataGridColumn dataField="fileName" backgroundColor="#C4C4C4" editable="false" sortable="false" visible="false"/>
+			<mx:AdvancedDataGridColumn headerText="左H工程-検査順" labelFunction="grid_labelFunction" sortCompareFunction="grid_groupL_sortCompareFunction"
+									   width="80" editable="false" backgroundColor="#C4C4C4"  sortable="true"/>
+			<mx:AdvancedDataGridColumn headerText="右H工程-検査順" labelFunction="grid_labelFunction" sortCompareFunction="grid_groupR_sortCompareFunction"
+									   width="80" editable="false" backgroundColor="#C4C4C4"  sortable="true"/>
+			<mx:AdvancedDataGridColumn headerText="更新者" backgroundColor="#C4C4C4" dataField="updateUser" labelFunction="Utils.updateUserToLabel" editable="false" sortable="false" width="60"/>
+			<mx:AdvancedDataGridColumn headerText="更新日" dataField="updateDate" labelFunction="Utils.updateDateToLabel" editable="false" backgroundColor="#C4C4C4" sortable="false" width="100" textAlign="right"/>
+			<mx:AdvancedDataGridColumn headerText="備考" dataField="notes" itemRenderer="jp.co.ctc.components.BackgroundColorItemRenderer" width="100" sortable="false"/>
+		</mx:columns>
+	</mx:AdvancedDataGrid>
+
+	<s:HGroup width="100%" height="30" verticalAlign="middle" horizontalAlign="center" fontFamily="ＭＳ ゴシック">
+		<!-- 2016/02/24 DA ins start -->
+		<s:HGroup width="40%">
+		</s:HGroup>
+		<s:HGroup width="30%" horizontalAlign="center">
+			<!-- 2016/02/24 DA ins end -->
+			<s:Button label="保存" height="30" id="btnSaveData" click="btnSaveData_clickHandler(event)"/>
+			<s:Button label="終了" height="30" id="btnExit" click="btnExit_clickHandler(event)"/>
+			<!-- 2016/02/24 DA ins start -->
+		</s:HGroup>
+		<s:HGroup width="40%" horizontalAlign="right">
+			<!-- 本番登録 -->
+			<s:Button label="{resourceManager.getString('resource','cli1200007')}" width="100" height="30" id="btnRealReg" click="btnRealReg_clickHandler(event)"/>
+
+			<!-- 本番登録予約 -->
+			<s:Button label="{resourceManager.getString('resource','cli1200008')}" width="100" height="30" id="btnRealRegReserve" click="btnRealRegReserve_clickHandler(event)"/>
+
+			<!-- 予約解除 -->
+			<s:Button label="{resourceManager.getString('resource','cli1200009')}" width="100" height="30" id="btnReserveCancel" click="btnReserveCancel_clickHandler(event)"/>
+		</s:HGroup>
+		<!-- 2016/02/24 DA ins end -->
+	</s:HGroup>
+</ctc:BaseApplication>

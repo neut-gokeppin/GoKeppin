@@ -1,0 +1,297 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:mx="library://ns.adobe.com/flex/mx" pageTitle="LFA物流・組立 部品棚管理システム"
+			   creationComplete="application1_creationCompleteHandler(event)">
+	<s:layout>
+		<s:VerticalLayout paddingLeft="8" paddingRight="8" paddingTop="8" paddingBottom="8" horizontalAlign="center" gap="8"/>
+	</s:layout>
+	<fx:Style source="lfa_inspection.css"/>
+	<fx:Script>
+
+		<![CDATA[
+			import flash.net.navigateToURL;
+
+			import flashx.textLayout.operations.SplitParagraphOperation;
+
+			import jp.co.ctc.entity.LgVResult;
+			import jp.co.ctc.util.Utils;
+
+			import mx.collections.ArrayList;
+			import mx.collections.ICollectionView;
+			import mx.collections.IHierarchicalData;
+			import mx.collections.IList;
+			import mx.controls.Alert;
+			import mx.controls.LinkButton;
+			import mx.controls.advancedDataGridClasses.AdvancedDataGridItemRenderer;
+			import mx.effects.Pause;
+			import mx.events.AdvancedDataGridEvent;
+			import mx.events.CloseEvent;
+			import mx.events.CollectionEvent;
+			import mx.events.CollectionEventKind;
+			import mx.events.FlexEvent;
+			import mx.events.ListEvent;
+			import mx.events.PropertyChangeEvent;
+			import mx.formatters.DateFormatter;
+			import mx.managers.CursorManager;
+			import mx.rpc.events.ResultEvent;
+			// ファイル出力用
+			private var fileReference:FileReference;
+			private var TITLE:String = "取出結果確認画面";
+
+
+			/**
+			 * アプリケーション初期化
+			 * ・ログインチェック
+			 */
+			protected function application1_creationCompleteHandler(event:FlexEvent):void
+			{
+				//ログインチェック
+				srvUser.isLogin();
+				Alert.buttonWidth = 100;
+
+				srv.getVResult();
+			}
+
+			/**
+			 * ログインチェックの結果が返ってきたときの処理。
+			 * ログインしてない時、ログイン画面に遷移します。
+			 */
+			protected function srvUSer_resultHandle(event:ResultEvent):void
+			{
+				if(!event.result){
+					// ログインしていないので、ログイン画面に移動
+					var request:URLRequest = new URLRequest("lg_login.html");
+					navigateToURL(request, "_self");
+				}
+			}
+
+			/**
+			 * 検索ボタン押下後の処理。
+			 */
+			protected function btnSerch_clickHandler(event:MouseEvent):void
+			{
+				//検索条件の初期値として格納(何も入力されていなければ全件表示)
+				var bodyNo:String = txtbodyNo.text;
+				var takeUser:String=txttakeUser.text;
+				var rackError:String="";
+				var partError:String="";
+				if(chRackError.selected){
+					rackError = "1";
+				}
+				if(chPartError.selected){
+					partError = "1";
+				}
+
+				var stDate:Date=new Date(1900,1,1);
+				var enDate:Date=new Date(9999,1,1);
+
+				//入力があれば日付チェック
+				if(dateFdStart.text!=""){
+					//入力値をDateに変換。(不備があればNullが返ってくる)
+					stDate=Utils.inputTextToDate(dateFdStart.text);
+					if(stDate==null){
+						Alert.show("日付が正しくありません。",TITLE);
+						return;
+					}
+				}
+
+				if(dateFdEnd.text!=""){
+					//入力値をDateに変換。(不備があればNullが返ってくる)
+					enDate=Utils.inputTextToDate(dateFdEnd.text)
+					if(enDate==null){
+						Alert.show("日付が正しくありません。",TITLE);
+						return;
+					}
+				}
+
+				//検索対象の開始日と終了日の前後チェック
+				if(dateFdStart.text!=""&&dateFdEnd.text!=""){
+					//falseが返ってくれば中断
+					if(!Utils.dateBeforeAfterCheck(stDate,enDate)){
+						Alert.show("開始日以降の日付を入力してください。",TITLE);
+						return;
+					}
+				}
+				//入力された検索項目で取出データを取得
+				srv.getVResult(stDate,enDate,bodyNo,takeUser,rackError,partError);
+			}
+
+			/**
+			 * グリッドのセルダブルクリック時の処理。
+			 */
+			protected function grid_doubleClickHandler(event:MouseEvent):void
+			{
+				//項目名の行を選択したとき
+				if(grid.selectedIndex==-1){
+					return;
+				}
+
+				//選択した行の必要な値を変数に格納
+				var bodyNo:String = grid.selectedItem.bodyNo;
+				var groupCode:String = grid.selectedItem.spsCode;
+				var recvDay:String = grid.selectedItem.recvDay;
+
+				var serchKeys:String = bodyNo +"," + groupCode + "," + recvDay + "\r\n";
+				//ReportActionクラスに遷移
+				navigateReportAction(serchKeys);
+			}
+
+
+			/**
+			 * 出力ボタン押下時の処理。
+			 */
+			protected function btnOutput_clickHandler(event:MouseEvent):void
+			{
+
+				//すべての検索ワードを格納用
+				var allKeys:String = "";
+				var selectRow:Array = grid.selectedItems;
+
+
+				//行が未選択
+				if(selectRow.length==0){
+					Alert.show("出力する行を選択してください",TITLE);
+					return;
+				}
+
+				// 行数分の各値を格納していく
+				// グリッドの下から値を取得していくので逆に取得する
+				for(var i:int=selectRow.length - 1 ; i >= 0 ; i--){
+					var rs:LgVResult = selectRow[i] as LgVResult;
+					allKeys += rs.bodyNo + ",";
+					allKeys += rs.spsCode + ",";
+					allKeys += rs.recvDay +"\r\n";
+				}
+				//ReportActionクラスに遷移
+				navigateReportAction(allKeys);
+			}
+
+			/**
+			 * レポートアクションクラスに遷移します。
+			 * URLVariablesで検索ワードを渡します。
+			 * @param serchKeys 選択されたグリッドの値が格納された文字列
+			 * (ボデーNo,SPSコード,受信日)
+			 */
+			private function navigateReportAction(serchKeys:String):void{
+
+				//遷移先の「serchKeys」に値を渡す
+				var vars:URLVariables = new URLVariables();
+				vars.serchKeys = serchKeys;
+				vars.fromPage = "LgResultTake";
+
+				// 帳票出力用URLの呼び出し
+				var request:URLRequest = new URLRequest("../report/getreport");
+				request.method = URLRequestMethod.POST;
+				request.data = vars;
+				navigateToURL(request);
+			}
+
+
+			/**
+			 * 終了ボタン押下時の処理。
+			 */
+			private function btnExit_clickHandler(event:MouseEvent):void{
+				// 物流・組立結果選択画面に遷移する
+				var request:URLRequest = new URLRequest("lg_result_menu.html");
+				navigateToURL(request, "_self");
+			}
+
+			/**
+			 * グリッドの各項目の値を適切な形にフォーマットします。
+			 */
+			protected function grid_labelFunction(obj:Object, column:AdvancedDataGridColumn):String
+			{
+				var rt:LgVResult = LgVResult(obj);
+				var label:String;
+				var dateFormat:DateFormatter = new DateFormatter();
+				dateFormat.formatString = "YYYY/MM/DD JJ:NN:SS";
+
+				switch(column.headerText) {
+					case "棚チェック時間":
+						label = dateFormat.format(rt.rackDate);
+						break;
+					case "棚チェック":
+						label = resultCheck(rt.rackResult.toString());
+						break;
+					case "部品チェック":
+						label = resultCheck(rt.partResult.toString());
+						break;
+					case "取出者":
+						label = rt.lgMUser.userName;
+						break;
+				}
+				return label;
+			}
+
+			/**
+			 * チェックのOK・NGを□・■で返します
+			 */
+			protected function resultCheck(result:String):String{
+				if(result=="0"){
+					return "□";
+				}
+				return "■";
+			}
+		]]>
+
+	</fx:Script>
+
+	<fx:Declarations>
+		<s:RemoteObject id="srv" destination="lgVResultService">
+			<s:method name="getVResult"/>
+		</s:RemoteObject>
+		<s:RemoteObject id="srvUser" destination="lgMUserService" result="srvUSer_resultHandle(event)"/>
+		<s:RemoteObject id="srvReport" destination="reportService" >
+			<s:method name="getreport"/>
+		</s:RemoteObject>
+	</fx:Declarations>
+
+	<s:HGroup width="100%" height="24" verticalAlign="middle" fontFamily="ＭＳ ゴシック">
+		<s:Label text="取出結果確認画面" fontSize="14" fontWeight="bold"/>
+	</s:HGroup>
+
+	<s:HGroup width="100%" height="24" verticalAlign="middle" fontFamily="ＭＳ ゴシック">
+		<s:Label width="100" text="号車No."/>
+		<s:TextInput id="txtbodyNo" width="140" maxChars="5" imeMode="ALPHANUMERIC_HALF" tabIndex="0"/>
+		<s:Label  text="" width="25"/>
+		<s:CheckBox id="chRackError" label="棚チェックNGありのみ" tabIndex="4"/>
+	</s:HGroup>
+
+	<s:HGroup width="100%" height="24" verticalAlign="middle" fontFamily="ＭＳ ゴシック">
+		<s:Label text="取出者" width="100"/>
+		<s:TextInput id="txttakeUser" width="140" maxChars="30" imeMode="{IMEConversionMode.JAPANESE_HIRAGANA}" tabIndex="1"/>
+		<s:Label  text="" width="25"/>
+		<s:CheckBox id="chPartError" label="部品チェックNGありのみ" tabIndex="4"/>
+	</s:HGroup>
+
+	<s:HGroup width="100%" height="24" verticalAlign="middle" fontFamily="ＭＳ ゴシック">
+		<s:Label text="取出日" width="100" />
+		<mx:DateField id="dateFdStart" width="140" editable="true" imeMode="ALPHANUMERIC_HALF" tabIndex="2" restrict="0-9/" />
+		<s:Label  text="～" textAlign="center" width="25"/>
+		<mx:DateField id="dateFdEnd" width="140" editable="true" imeMode="ALPHANUMERIC_HALF" tabIndex="3" restrict="0-9/" />
+		<s:Button  id="btnSerch" height="30" label="検索"  click="btnSerch_clickHandler(event)" tabIndex="4"/>
+	</s:HGroup>
+
+	<mx:AdvancedDataGrid id="grid" designViewDataType="flat" width="100%" height="100%" sortExpertMode="true"
+						 dataProvider="{srv.getVResult.lastResult}" x="1" y="129" doubleClickEnabled="true"
+						 doubleClick="grid_doubleClickHandler(event)" selectionMode="multipleRows">
+		<mx:columns>
+			<mx:AdvancedDataGridColumn headerText="号車No." dataField="comment1" width="50"/>
+			<mx:AdvancedDataGridColumn headerText="SPS台車" dataField="spsName" width="50"/>
+			<mx:AdvancedDataGridColumn headerText="棚チェック" dataField="rackResult" textAlign="center"
+									   labelFunction="grid_labelFunction" width="35"/>
+			<mx:AdvancedDataGridColumn headerText="部品チェック" dataField="partResult" textAlign="center"
+									   labelFunction="grid_labelFunction" width="35"/>
+			<mx:AdvancedDataGridColumn headerText="取出者" width="50" sortable="false"
+									   labelFunction="grid_labelFunction"/>
+			<mx:AdvancedDataGridColumn headerText="棚チェック時間" labelFunction="grid_labelFunction" textAlign="right"
+									   dataField="rackDate" width="50"/>
+			</mx:columns>
+	</mx:AdvancedDataGrid>
+
+	<s:HGroup width="100%" height="24" verticalAlign="middle" horizontalAlign="center" fontFamily="ＭＳ ゴシック">
+		<s:Button id="btnOutput" height="30" label="出力" click="btnOutput_clickHandler(event)"/>
+		<s:Button id="btnExit" height="30" label="終了" click="btnExit_clickHandler(event)"/>
+	</s:HGroup>
+	</s:Application>

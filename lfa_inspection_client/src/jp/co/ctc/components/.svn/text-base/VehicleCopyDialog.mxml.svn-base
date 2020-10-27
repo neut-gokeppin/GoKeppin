@@ -1,0 +1,276 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:mx="library://ns.adobe.com/flex/mx"
+			   width="396" height="230" close="titlewindow1_closeHandler(event)" enabled="true"
+			   title="車種間マスタコピー選択">
+	<s:TextInput id="vehicleFrom" x="104" y="52" width="135" editable="false" keyUp="input_keyUp(event)"/>
+	<s:Label x="19" y="16" text="コピー元車種のマスタから&#xd;コピー先車種の仮マスタへコピーを実施します。"/>
+	<s:Label x="19" y="57" text="コピー元車種"/>
+	<s:Label x="19" y="120" text="コピー先車種"/>
+	<s:Label x="266" y="57" text="マスタ"/>
+	<s:DropDownList id="ddlMst" x="310" y="52.5" width="62"
+					tabIndex="6" dataProvider="{MstSelectEvent.getMasterList()}">
+		<!-- 2016/02/24 DA del start -->
+		<!--
+		<mx:ArrayCollection>
+			<fx:String></fx:String>
+			<fx:String>仮</fx:String>
+			<fx:String>本番</fx:String>
+		</mx:ArrayCollection>
+		-->
+		<!-- 2016/02/24 DA del end -->
+	</s:DropDownList>
+	<s:DropDownList id="ddlVehicleTo" x="104" y="115.5" width="135"
+					dataProvider="{arrVehicleTo}"
+					labelField="bctypeVehicle"
+					tabIndex="6"></s:DropDownList>
+	<!-- 2016/02/24 DA ins start -->
+	<s:Label x="266" y="120" text="{resourceManager.getString('resource','cli1700001')}"/>
+	<s:DropDownList id="ddlMstTo" x="310" y="115.5" width="62" tabIndex="6" dataProvider="{MstSelectEvent.getTempMasterNameList()}" />
+	<!-- 2016/02/24 DA ins end -->
+	<mx:Image x="27" y="76" width="56" height="30" source="jp/co/ctc/components/arrow.jpg"/>
+	<s:Button x="96" y="155" label="コピー実施" click="btnCopy();" width="94"/>
+	<s:Button x="206" y="155" label="キャンセル" click="closeWindow(-1);" width="94"/>
+
+	<!-- 2016/02/24 DA ins start -->
+	<fx:Metadata>
+		[ResourceBundle("resource")]
+		[ResourceBundle("message")]
+	</fx:Metadata>
+	<!-- 2016/02/24 DA ins end -->
+
+	<fx:Script>
+		<![CDATA[
+			import jp.co.ctc.entity.MVehicle;
+			import jp.co.ctc.event.MstSelectEvent;
+
+			import mx.collections.ArrayCollection;
+			import mx.controls.Alert;
+			import mx.events.CloseEvent;
+			import mx.managers.PopUpManager;
+			import mx.rpc.events.ResultEvent;
+
+			[Bindable]
+			public var arrVehicleTo:ArrayCollection = new ArrayCollection();
+
+			private var vehicleTo:String;
+			private var mst:String;
+			private var TITLE:String = "車種間マスタコピー選択";
+
+			// 2016/02/24 DA ins start
+			private var bctypeFrom:String;
+			public var mstVerFrom:int;
+			public var mstVerTo:int;
+			// 2016/02/24 DA ins end
+
+			// 2016/02/24 DA ins start
+			/**
+			 * コピー元車種
+			 */
+			public function setBctypeFrom(name:String):void {
+				bctypeFrom = name;
+			}
+			// 2016/02/24 DA ins end
+
+			/**
+			 * コピー元車種表示
+			 */
+			public function setVehicleFrom(name:String):void {
+				vehicleFrom.text = name;
+			}
+
+			/**
+			 * コピー先車種
+			 */
+			public function getVehicleTo():String {
+				return vehicleTo;
+			}
+			/**
+			 * コピー先車種
+			 */
+			public function setVehicleTo(arr:ArrayCollection):void {
+				// コピー先車種のドロップダウンデータ作成
+				arrVehicleTo.addItem(new MVehicle().bctypeVehicle = "");	// 空行
+				for each (var vehicle:MVehicle in arr ) {
+					// 非表示がoffのデータのみ追加
+					if (false == vehicle.endOfProd) {
+						var mVehicle:MVehicle = new MVehicle();
+						mVehicle = vehicle;
+						mVehicle.bctypeVehicle = vehicle.bctype + "-" + vehicle.vehicleName;
+						arrVehicleTo.addItem(mVehicle);
+					}
+				}
+			}
+
+			/**
+			 * コピー元マスタのゲッター
+			 */
+			public function getMst():String {
+				var result:String = "";
+
+				// 2016/02/24 DA del start
+//				if ("仮" == mst) {
+//					result = "0";
+//				} else if ("本番" == mst) {
+//					result = "1";
+//				}
+				// 2016/02/24 DA del end
+
+				// 2016/02/24 DA ins start
+				if(MstSelectEvent.isReal(this.ddlMst.selectedItem)) {
+					result = "1";
+				} else {
+					result = "0";
+				}
+				// 2016/02/24 DA ins end
+
+				return result;
+			}
+
+			/**
+			 * 順序のセッター
+			 * OKボタン押下イベント
+			 */
+			private function btnCopy():void {
+				if (ddlVehicleTo.selectedIndex <= 0) {
+					Alert.show("コピー先車種が選択されていません。", TITLE);
+					return;
+				}
+
+				// 2016/02/24 DA del start
+				//if (ddlMst.selectedIndex <= 0){
+				//	Alert.show("マスタが選択されていません。", TITLE);
+				//	return;
+				//}
+				//if ("仮" == ddlMst.selectedItem &&  vehicleFrom.text == ddlVehicleTo.selectedItem.bctypeVehicle) {
+				//	Alert.show("コピー元車種とコピー先車種が同じです。", TITLE);
+				//	return;
+				//}
+				// 2016/02/24 DA del end
+
+				// 2016/02/24 DA ins start
+				if (ddlMst.selectedIndex < 0 || ddlMstTo.selectedIndex < 0){
+					// msg00024=マスタが選択されていません。
+					Alert.show(resourceManager.getString('message','msg00024'), TITLE);
+					return;
+				}
+
+				var selectMstFrom:int = MstSelectEvent.getMasterCode(ddlMst.selectedItem);
+				var selectMstTo:int = MstSelectEvent.getMasterCode(ddlMstTo.selectedItem);
+				var bctypeTo:String = ddlVehicleTo.selectedItem.bctype;
+
+				if(bctypeFrom == bctypeTo && selectMstFrom == selectMstTo) {
+					// msg00025=コピー元車種とコピー先車種が同じです。
+					Alert.show(resourceManager.getString('message','msg00025'), TITLE);
+					return;
+				}
+
+				// 予約中チェック
+				srvMstRegist1.isReservedVehicle(selectMstTo, bctypeTo);
+				// 2016/02/24 DA ins end
+			}
+
+			/**
+			 * OKボタン押下時の処理（チェック後の処理）
+			 */
+			protected function isReservedVehicle1_resultHandler(event:ResultEvent):void
+			{
+				// 2016/02/24 DA ins start
+				if (event.result != null && event.result) {
+					// 予約中のため、車種間マスタコピーを実施できません。
+					Alert.show(resourceManager.getString('message','msg00021'), TITLE);
+					return;
+				}
+				// 2016/02/24 DA ins end
+
+				var myAlert : Alert = Alert.show(
+					"車種間マスタコピーを実施します。\n"
+					+ "コピー先に指定した車種の工程、検査順、検査項目、\n"
+					//+ "指示記号の仮マスタは削除されます。\n"
+					+ "指示記号の" + this.ddlMstTo.selectedItem + "マスタは削除されます。\n"
+					+ "よろしいですか？"
+					, TITLE
+					, Alert.OK | Alert.CANCEL
+					, null
+					, function(event:CloseEvent):void {
+						if (event.detail == Alert.OK) {
+							// 2016/02/24 DA upd start
+							// 予約中チェック
+							var selectMstTo:int = MstSelectEvent.getMasterCode(ddlMstTo.selectedItem);
+							var bctypeTo:String = ddlVehicleTo.selectedItem.bctype;
+							srvMstRegist2.isReservedVehicle(selectMstTo, bctypeTo);
+
+							//mst = ddlMst.selectedItem;
+							//vehicleTo = ddlVehicleTo.selectedItem.bctype;
+							//closeWindow(1);
+							// 2016/02/24 DA upd end
+						}
+					},
+					// 2016/08/29 DA ins start
+					null,
+					Alert.CANCEL
+					// 2016/08/29 DA ins end
+				);
+			}
+
+			// 2016/02/24 DA ins start
+			/**
+			 * OKボタン押下時の処理（ダイアログ後の処理）
+			 */
+			protected function isReservedVehicle2_resultHandler(event:ResultEvent):void
+			{
+				if (event.result != null && event.result) {
+					// 予約中のため、車種間マスタコピーを実施できません。
+					Alert.show(resourceManager.getString('message','msg00021'), TITLE);
+					return;
+				}
+
+				// 親画面へ情報を渡す
+				mst = ddlMst.selectedItem;
+				vehicleTo = ddlVehicleTo.selectedItem.bctype;
+				mstVerFrom = MstSelectEvent.getMasterCode(ddlMst.selectedItem);
+				mstVerTo = MstSelectEvent.getMasterCode(ddlMstTo.selectedItem);
+				closeWindow(1);
+			}
+			// 2016/02/24 DA ins end
+
+			/**
+			 * キャンセルボタンの押下イベント
+			 * クローズイベントを発生させる。
+			 */
+			protected function closeWindow(detail:int):void {
+				var closeEvent:CloseEvent = new CloseEvent(mx.events.CloseEvent.CLOSE,false,false,detail);
+				dispatchEvent(closeEvent);
+			}
+
+			protected function titlewindow1_closeHandler(event:CloseEvent):void
+			{
+				PopUpManager.removePopUp(this);
+			}
+
+			/**
+			 * キーイベント。Enterキーが押されたらOKボタン押下時と同様の処理を行う
+			 */
+			protected function input_keyUp(event:KeyboardEvent):void{
+				if (event.keyCode == 13) {
+					btnCopy();
+				}
+			}
+
+		]]>
+	</fx:Script>
+
+	<fx:Declarations>
+		<!-- 非ビジュアルエレメント (サービス、値オブジェクトなど) をここに配置 -->
+		<!-- 2016/02/24 DA ins start -->
+		<s:RemoteObject id="srvMstRegist1" destination="mstRegistService">
+			<s:method name="isReservedVehicle" result="isReservedVehicle1_resultHandler(event)" />
+		</s:RemoteObject>
+		<s:RemoteObject id="srvMstRegist2" destination="mstRegistService">
+			<s:method name="isReservedVehicle" result="isReservedVehicle2_resultHandler(event)" />
+		</s:RemoteObject>
+		<!-- 2016/02/24 DA ins end -->
+	</fx:Declarations>
+
+</s:TitleWindow>

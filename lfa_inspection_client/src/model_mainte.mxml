@@ -1,0 +1,721 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:mx="library://ns.adobe.com/flex/mx" pageTitle="誤欠品検出力向上ツール - 車種マスタメンテナンス"
+			   creationComplete="application1_creationCompleteHandler(event)" xmlns:components="jp.co.ctc.components.*">
+	<s:layout>
+		<s:VerticalLayout paddingLeft="8" paddingRight="8" paddingTop="8" paddingBottom="8" horizontalAlign="center" gap="8"/>
+	</s:layout>
+
+	<fx:Style source="lfa_inspection.css"/>
+
+	<!-- 2016/02/24 DA ins start -->
+	<fx:Metadata>
+		[ResourceBundle("resource")]
+	</fx:Metadata>
+	<!-- 2016/02/24 DA ins end -->
+
+	<fx:Script>
+		<![CDATA[
+			import jp.co.ctc.components.VehicleCopyDialog;
+			import jp.co.ctc.entity.MUser;
+			import jp.co.ctc.entity.MVehicle;
+			import jp.co.ctc.util.MUserUtils;
+			import jp.co.ctc.util.Utils;
+			
+			import mx.charts.chartClasses.ChartItemDragProxy;
+			import mx.collections.ArrayList;
+			import mx.controls.Alert;
+			import mx.controls.List;
+			import mx.controls.advancedDataGridClasses.AdvancedDataGridItemRenderer;
+			import mx.events.AdvancedDataGridEvent;
+			import mx.events.CloseEvent;
+			import mx.events.CollectionEvent;
+			import mx.events.CollectionEventKind;
+			import mx.events.FlexEvent;
+			import mx.events.ListEvent;
+			import mx.events.ScrollEvent;
+			import mx.managers.PopUpManager;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+
+			private var rmenuItem:MVehicle;
+			private var rmenuIndex:int = -1;
+			private var rmenu:ContextMenu;
+			private var rmenuitem1:ContextMenuItem;
+			private var rmenuitem2:ContextMenuItem;
+			private var removedRows:ArrayCollection = new ArrayCollection();
+			private var TITLE:String = "車種マスタメンテナンス";
+
+			private var loginUser:String = "";
+			private var copyFlg:Boolean = false;	// 車種間マスタコピー選択画面表示時true
+			private var lineDelFlg:Boolean = false;	// 行削除時にtrue
+
+			// 2016/02/24 DA ins start
+			public var gridScrollPosition:int = 0; // 表示行のインデックス
+			public var loginUserInfo:MUser; //ログインユーザ情報
+			// 2016/02/24 DA ins end
+
+			/**
+			 * 初期ロード時の処理。
+			 * ユーザーコードを取得します。
+			 */
+			protected function application1_creationCompleteHandler(event:FlexEvent):void
+			{
+				// Debug用 ****************************************
+				//　Debugログインさせ、ログインが行われたようにする。
+				//srvUser.login("CJ00900");
+
+				//ユーザーコードの取得
+				srvUser.getUserCode();
+
+				// Alertのボタンの幅を変更
+				// デフォルトの60だと"キャンセル"の文字が表示しきれない。
+				Alert.buttonWidth = 100;
+
+				/**
+				 * アプリケーション初期化
+				 * ・コンテキストメニューの準備
+				 */
+				rmenu = new ContextMenu();
+				rmenu.hideBuiltInItems();
+				rmenu.addEventListener(ContextMenuEvent.MENU_SELECT, rmenu_menuSelectHandler);
+				rmenuitem1 = new ContextMenuItem("行を追加");
+				rmenuitem1.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, addRowHandler);
+				rmenu.customItems.push(rmenuitem1);
+				rmenuitem2 = new ContextMenuItem("行を削除");
+				rmenuitem2.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, removeRowHandler);
+				rmenu.customItems.push(rmenuitem2);
+
+				// 2016/02/24 DA del start
+//				//初期ロードの全件表示
+//				srvMVehicle.getMVehicleMstRegist();
+//				//グリッドのメニューの設定
+//				grid.contextMenu = rmenu;
+				// 2016/02/24 DA del end
+
+			}
+
+			/**
+			 * 車種マスタ一覧取得
+			 */
+			protected function getMVehicleMstRegist_resultHandler(event:ResultEvent):void
+			{
+				// 画面を活性にする
+				this.enabled = true;
+				if (ac.length == 0) {
+					Alert.show("取得データがありません。",TITLE);
+				}
+				// 2016/02/24 DA ins start
+				this.grid.verticalScrollPosition = this.gridScrollPosition;
+				this.grid.initialize();
+				this.grid.dataProvider.refresh();
+				// 2016/02/24 DA ins end
+			}
+			/**
+			 * 車種マスタ一覧取得異常終了
+			 */
+			protected function getMVehicleMstRegist_faultHandler(event:FaultEvent):void
+			{
+				// 画面を活性にする
+				this.enabled = true;
+				Alert.show("一覧取得処理でエラーが発生しました。",TITLE);
+			}
+			/**
+			 * ユーザーコードの取得後の処理。
+			 * ユーザコードがなければログインページに戻す
+			 */
+			protected function getUserCode_resultHandler(event:ResultEvent):void
+			{
+				//ユーザコードがなければログインページに戻す
+				if (event.result==null) {
+					var request:URLRequest = new URLRequest("login.html");
+					navigateToURL(request, "_self");
+				}
+				else{
+					this.loginUser = event.result.toString();
+					
+					// 2016/02/24 DA ins start
+					// ログインユーザ情報を取得
+					srvUser.getMUser(this.loginUser);
+					// 2016/02/24 DA ins end
+				}
+			}
+
+			/**
+			 * 右クリックメニュー表示時の処理。
+			 */
+			private function rmenu_menuSelectHandler(event:ContextMenuEvent):void {
+				// 右クリックされた行を保持しておく
+				if (-1 < rmenuIndex && rmenuIndex < ac.length) {
+					rmenuItem = ac.getItemAt(rmenuIndex) as MVehicle;
+
+					var row:int = ac.getItemIndex(rmenuItem);
+					grid.selectedIndex = row;
+
+				} else {
+					rmenuItem = null;
+				}
+			}
+
+			/**
+			 * 行追加の処理
+			 */
+			private function addRowHandler(item:ContextMenuEvent):void {
+				var vehicle:MVehicle = new MVehicle();
+				//Flagの初期値を0で格納、作成者も格納
+				vehicle.insertUser = loginUser;
+				vehicle.editDiv = "I";
+				vehicle.bctype = "";
+				vehicle.vehicleName = "";
+
+				if (ac.length == 0) {
+
+					ac.addItem(vehicle);
+					// 追加した行を選択状態にする
+					grid.selectedIndex = 0;
+				} else {
+					// 右クリックした行番号を取得
+					// 未選択の場合、最後の行に追加
+					if (rmenuItem == null) {
+						rmenuIndex = ac.length - 1;
+						rmenuItem = ac.getItemAt(rmenuIndex) as MVehicle;
+					}
+					var mVehicle:MVehicle = rmenuItem;
+					var row:int = ac.getItemIndex(mVehicle);
+
+
+					ac.addItemAt(vehicle, row + 1);
+					// 追加した行を選択状態にする
+					grid.selectedIndex = row + 1;
+
+				}
+			}
+
+			/**
+			 * 行削除の処理
+			 */
+			private function removeRowHandler(item:ContextMenuEvent):void
+			{
+				// 右クリックした行番号を取得
+				// 行選択チェック
+				if (rmenuItem == null) {
+					return;
+				}
+
+				var mVehicle:MVehicle = rmenuItem;
+				var row:int = ac.getItemIndex(mVehicle);
+
+//				var vehicle:MVehicle = ac[row];
+				if (mVehicle.editDiv != "I") {
+					// 削除行を保存
+					removedRows.addItem(mVehicle);
+				}
+				grid.selectedIndex = row + 1;
+				// グリッドから削除
+				ac.removeItemAt(row);
+
+			}
+
+			/**
+			 * グリッドの値を持つArrayの値が変更された時の処理。
+			 * グリッドの新規追加・削除・更新に対応した処理を行います。
+			 */
+			protected function ac_collectionChangeHandler(event:CollectionEvent):void
+			{
+				if(event.kind == CollectionEventKind.UPDATE){
+
+//					// 削除したときに違う行を更新してしまうため
+//					if (grid.selectedIndex == -1) {
+//						return;
+//					}
+					var editDiv:String = (ac[grid.selectedIndex] as MVehicle).editDiv;
+
+					if (editDiv != "I" && copyFlg == false) {
+						// 新規に追加した行でなければ編集区分にU:変更をセットし、
+						// 更新者にログインユーザーをセット
+						(ac[grid.selectedIndex] as MVehicle).editDiv = "U";
+						(ac[grid.selectedIndex] as MVehicle).updateUser = loginUser;
+					}
+				} else if(event.kind == CollectionEventKind.RESET) {
+					// 2016/02/24 DA ins start
+					// 保持位置にスクロール
+					this.grid.verticalScrollPosition = this.gridScrollPosition;
+					this.grid.initialize();
+					this.grid.dataProvider.refresh();
+					// 2016/02/24 DA ins end
+				}
+			}
+
+			/**
+			 * 終了ボタン押下時の処理。
+			 */
+			private function btnExit_clickHandler(event:MouseEvent):void{
+
+				// 編集あり
+				if (updataExists()) {
+					var myAlert : Alert = Alert.show("変更が保存されていません。終了してもよろしいですか？",
+						TITLE,
+						Alert.OK | Alert.CANCEL, null, alertCloseHandler,
+						// 2016/08/29 DA ins start
+						null,
+						Alert.CANCEL
+						// 2016/08/29 DA ins end
+					);
+					return;
+				}
+
+				// Browserを閉じる
+				closeMyBrowser();
+				return;
+			}
+
+			/**
+			 * 変更の有無をチェックします
+			 * @return true:変更有　false:変更無
+			 */
+			private function updataExists():Boolean{
+				// 変更有無チェック
+				for (var loop_cnt:int = 0;loop_cnt < ac.length; loop_cnt++) {
+					var mVehicle:MVehicle = ac[loop_cnt];
+					if (mVehicle.editDiv != null) {
+						return  true;
+					}
+				}
+				// 削除件数
+				if (removedRows.length > 0) {
+					return true;
+				}
+				return false;
+			}
+
+			/**
+			 * 終了確認ダイアログの結果処理
+			 */
+			private function alertCloseHandler(e:CloseEvent) : void
+			{
+				if (e.detail == Alert.OK) {
+					closeMyBrowser();
+					return;
+				}
+			}
+			/**
+			 * ブラウザの終了
+			 */
+			private function closeMyBrowser():void
+			{
+				// 機能選択画面に遷移する
+				var request:URLRequest = new URLRequest("function_menu.html");
+				navigateToURL(request, "_self");
+			}
+
+			/**
+			 * 保存ボタン押下時の処理。
+			 */
+			protected function btnUpdate_clickHandler(event:MouseEvent):void
+			{
+				// 2016/02/24 DA ins start
+				// 変更有無チェック
+				if (!updataExists()) {
+					Alert.show("保存する内容がありません", TITLE);
+					return;
+				}
+
+				// 予約中チェック
+				var bctypeList:ArrayCollection = new ArrayCollection();
+				var item:MVehicle;
+				var loop_cnt:int;
+				// 削除した車種コードを取得
+				for (loop_cnt = 0; loop_cnt < removedRows.length; loop_cnt++) {
+					item = removedRows[loop_cnt];
+					bctypeList.addItem(item.bctype);
+				}
+
+				// 2016/08/26 DA ins start
+				// 編集した車種コードを取得
+				for (var eopLoop:int = 0; eopLoop < ac.length ; eopLoop++) {
+					var eopMVehicle:MVehicle = ac[eopLoop];
+					if (eopMVehicle.editDiv == null) {
+						continue;
+					}
+					if (eopMVehicle.endOfProd) {
+						bctypeList.addItem(eopMVehicle.bctype);
+					}
+				}
+				// 2016/08/26 DA ins end
+				
+				srvMstRegist.isReservedVehicle(bctypeList);
+				// 2016/02/24 DA ins end
+			}
+
+			/**
+			 * 保存ボタン押下時の処理（チェック後の処理）
+			 */
+			protected function isReservedVehicle_resultHandler(event:ResultEvent):void
+			{
+				// 2016/02/24 DA ins start
+				if (event.result != null && event.result) {
+					
+					// 2016/08/26 DA upd start
+					//// 予約されているため、削除することができません。
+					//Alert.show(resourceManager.getString('message','msg00022'), TITLE);
+					// 予約されているため、保存することができません。
+					Alert.show(resourceManager.getString('message','msg00023'), TITLE);
+					// 2016/08/26 DA upd end
+
+					// 2016/08/26 DA ins start
+					// 表示行を一時退避する
+					this.gridScrollPosition = this.grid.verticalScrollPosition;
+					// データベースから最新のデータを取得
+					srvMVehicle.getMVehicleMstRegist();
+					// removedRowsを初期化
+					removedRows = new ArrayCollection();
+					// 2016/08/26 DA ins end
+					
+					return;
+				}
+				// 2016/02/24 DA ins end
+
+				var mVehicle:MVehicle;
+				//var editFlag:Boolean = false;
+				var loop_cnt:int;
+
+				// 2016/02/24 DA del start
+				//// 変更有無チェック
+				//for ( loop_cnt = 0;loop_cnt < ac.length; loop_cnt++) {
+				//	mVehicle = ac[loop_cnt];
+				//	if (mVehicle.editDiv != null) {
+				//		editFlag = true;
+				//		break;
+				//	}
+				//}
+				// 2016/02/24 DA del end
+
+				// 新規行以外にする
+				var arrRemove:ArrayCollection = new ArrayCollection();
+				for each (var remove:MVehicle in removedRows) {
+					if (remove.editDiv == null) {
+						arrRemove.addItem(remove);
+					}
+				}
+
+				// 2016/02/24 DA del start
+				//if (editFlag == false && arrRemove.length == 0) {
+				//	Alert.show("保存する内容がありません",TITLE);
+				//	return;
+				//}
+				// 2016/02/24 DA del end
+
+				for ( loop_cnt =0;loop_cnt < ac.length; loop_cnt++) {
+					mVehicle = ac[loop_cnt];
+
+					if(mVehicle.editDiv == null){
+						continue;
+					}
+					//値をトリムして格納（Nullの時は空白を代入）
+					var bctype:String = Utils.jTrimToEmpty(mVehicle.bctype);
+					var vehicleName:String = Utils.jTrimToEmpty(mVehicle.vehicleName);
+					var endOfProd:Boolean = mVehicle.endOfProd;
+
+					//新規追加時の車種区分コードチェック
+					if(mVehicle.editDiv == "I"){
+
+						if(bctype.length == 0){
+							Utils.gridSelectRow(grid,loop_cnt);
+							Alert.show("BC車種区分が入力されていません。",TITLE);
+							return;
+						}
+
+						//英数字チェックを実行(正しければ英字を大文字に変換)
+						if(!char_NumEng_check(bctype)){
+							Utils.gridSelectRow(grid,loop_cnt);
+							Alert.show("BC車種区分が正しくありません。", TITLE);
+							return;
+						}else{
+							bctype = bctype.toUpperCase();
+						}
+
+						//コードの重複チェック
+						for(var i:int=0; i<ac.length ;i++){
+							if(loop_cnt == i){
+								continue;
+							}
+							var vehicle2:MVehicle = ac[i];
+							var vehicle2Code:String = Utils.jTrimToEmpty(vehicle2.bctype);
+							if(bctype == vehicle2Code){
+								Utils.gridSelectRow(grid,loop_cnt);
+								Alert.show("BC車種区分コードは既に存在します。",TITLE);
+								return;
+							}
+						}
+					}
+
+					//名前のチェック
+					if (vehicleName.length == 0){
+						Utils.gridSelectRow(grid,loop_cnt);
+						Alert.show("車種名称が入力されていません。",TITLE);
+						return;
+					}
+					if (vehicleName.length > 20){
+						grid.scrollToIndex(loop_cnt);
+						Alert.show("車種名称を20文字以下にしてください。",TITLE);
+						return;
+					}
+
+					//チェックが通ればその値を格納
+					mVehicle.bctype = bctype;
+					mVehicle.vehicleName = vehicleName;
+					mVehicle.endOfProd = endOfProd;
+
+					ac[loop_cnt] = mVehicle;
+				}
+
+				// 2016/02/24 DA ins start
+				// 表示行を一時退避する
+				this.gridScrollPosition = this.grid.verticalScrollPosition;
+				// 2016/02/24 DA ins end
+
+				// 画面を非活性にする
+				this.enabled = false;
+
+				// 変更内容をデータベースに反映
+				srvMVehicle.updateAll(ac, arrRemove);
+				// データベースから最新のデータを取得
+				srvMVehicle.getMVehicleMstRegist();
+				// removedRowsを初期化
+				removedRows = new ArrayCollection();
+
+			}
+
+			/**
+			 * BC車種区分の英数字チェック。
+			 * @return true:チェックOK　false:チェックNG
+			 */
+			private function char_NumEng_check(bctype:String):Boolean
+			{
+				var userMatch:Array = bctype.match(/[0-9A-Za-z]{1}/);
+				if(userMatch == null || bctype.length > 1 || bctype.length != userMatch[0].length){
+					return false;
+				}
+				return true;
+			}
+
+			/**
+			 * 削除、更新正常完了
+			 */
+			private function onUpdateAllResult(e:ResultEvent):void
+			{
+				var msg:String = e.result.toString();
+				if (msg == "") {
+					Alert.show("車種マスタを保存しました。", TITLE);
+				} else {
+					// 保存に失敗
+					Alert.show(msg,TITLE);
+				}
+			}
+
+			/**
+			 * 削除、更新Error Event
+			 */
+			private function onUpdateAllFault(e:FaultEvent):void
+			{
+				Alert.show("保存に失敗しました。",TITLE);
+			}
+
+			/**
+			 * コピー正常完了
+			 */
+			private function onCopyResult(e:ResultEvent):void
+			{
+				// 画面を活性にする
+				this.enabled = true;
+
+				if (e.result == 0) {
+					Alert.show("車種のマスタコピーを実施しました。", TITLE);
+				} else {
+					// 保存に失敗
+					Alert.show("車種のマスタコピーでエラーが発生しました。",TITLE);
+				}
+			}
+			/**
+			 * コピー異常Error Event
+			 */
+			private function onCopyFault(e:FaultEvent):void
+			{
+				// 画面を活性にする
+				this.enabled = true;
+
+				Alert.show("車種のマスタコピーでエラーが発生しました。",TITLE);
+			}
+
+			/**
+			 * グリッド上のデータにマウスが乗ったときの処理
+			 */
+			protected function grid_itemRollOverHandler(event:ListEvent):void
+			{
+				// マウスカーソルの乗っている行を保持しておく。
+				// 右クリックで使用する
+				rmenuIndex = event.rowIndex;
+			}
+
+			/**
+			 * グリッドを編集時の処理。
+			 */
+			protected function grid_itemEditBeginHandler(event:AdvancedDataGridEvent):void
+			{
+				// 新規追加行以外の従業員コードを編集したときは処理を無効にする
+				if (event.columnIndex == 0 && MVehicle(event.itemRenderer.data).editDiv != "I")
+				{
+					event.preventDefault();
+				}
+			}
+
+			/**
+			 * 車種間マスタコピーボタン押下時の処理。
+			 * 車種間マスタコピー選択ダイアログを表示します。
+			 */
+			protected function btnVehicleCopy_clickHandler(event:MouseEvent):void
+			{
+				// 行選択チェック
+				if (grid.selectedIndex == -1) {
+					Alert.show("コピー元の車種を選択してください", TITLE);
+					return;
+				}
+				// 編集データがある場合はエラー
+				if (updataExists()) {
+					Alert.show("編集中のデータを保存してから車種間マスタコピーを行ってください", TITLE);
+					return;
+				}
+				copyFlg = true;
+				var selVehicle:MVehicle = ac[grid.selectedIndex];
+				var dialog:VehicleCopyDialog = PopUpManager.createPopUp(this,VehicleCopyDialog,true) as VehicleCopyDialog;
+				dialog.addEventListener(CloseEvent.CLOSE,closeWindow);
+				// コピー元車種
+				// 2016/02/24 DA ins start
+				dialog.setBctypeFrom(selVehicle.bctype);
+				// 2016/02/24 DA ins end
+				dialog.setVehicleFrom(selVehicle.bctype + "-" + selVehicle.vehicleName);
+				// コピー先車種
+				dialog.setVehicleTo(ac);
+				PopUpManager.centerPopUp(dialog);
+				dialog.ddlMst.setFocus();
+			}
+			/**
+			 * 入力ウィンドウが閉じられたときのイベント処理
+			 */
+			public function closeWindow(e:CloseEvent):void{
+				copyFlg = false;
+
+				//OKが押下された場合だけ処理する。
+				if (e.detail == 1) {
+					// 画面を非活性にする
+					this.enabled = false;
+
+					var bctypeFrom:String = (ac[grid.selectedIndex] as MVehicle).bctype;
+					var bctypeTo:String = e.target.getVehicleTo();
+					var sop:String = e.target.getMst();
+					// 2016/02/24 DA ins start
+					var mstVerFrom:int = e.target.mstVerFrom;
+					var mstVerTo:int = e.target.mstVerTo;
+					// 2016/02/24 DA ins end
+
+					// 2016/02/24 DA upd start
+					srvMVehicle.copyVehicle(bctypeFrom, bctypeTo, sop, mstVerFrom, mstVerTo, this.loginUser);
+					// 2016/02/24 DA upd end
+				}
+			}
+
+			// 2016/02/24 DA ins start
+			protected function getMUser_resultHandler(event:ResultEvent):void {
+				this.loginUserInfo = event.result as MUser;
+				this.enabledComponent();
+				//初期ロードの全件表示
+				srvMVehicle.getMVehicleMstRegist();
+			}
+			
+			/**
+			 * コンポーネントの制御をする
+			 */
+			private function enabledComponent():void
+			{
+				if (MUserUtils.isAdministrator(this.loginUserInfo)) {
+					// マスタ管理者
+					this.btnVehicleCopy.enabled = true;
+					this.grid.editable = "true";
+					this.btnUpdate.enabled = true;
+
+					//右クリックメニューの設定
+					grid.contextMenu = rmenu;
+				} else {
+					// 以外
+					this.btnVehicleCopy.enabled = false;
+					this.grid.editable = "false";
+					this.btnUpdate.enabled = false;
+				}
+			}
+			// 2016/02/24 DA ins end
+
+			// 2016/02/24 DA ins start
+			/**
+			 * スクロール時に正しいデータを表示する
+			 */
+			protected function grid_scrollHandler(event:ScrollEvent):void
+			{
+				this.gridScrollPosition = this.grid.verticalScrollPosition;
+			}
+			// 2016/02/24 DA ins end
+
+		]]>
+	</fx:Script>
+
+	<fx:Declarations>
+		<s:RemoteObject id="srvMVehicle" destination="MVehicleService">
+			<s:method name="getMVehicleMstRegist" result="getMVehicleMstRegist_resultHandler(event)" fault="getMVehicleMstRegist_faultHandler(event)"/>
+			<s:method name="updateAll" result="onUpdateAllResult(event)" fault="onUpdateAllFault(event)"/>
+			<s:method name="copyVehicle" result="onCopyResult(event)" fault="onCopyFault(event)"/>
+		</s:RemoteObject>
+
+		<s:RemoteObject id="srvUser" destination="MUserService">
+			<s:method name="getUserCode" result="getUserCode_resultHandler(event)"/>
+			<s:method name="getMUser" result="getMUser_resultHandler(event)"/>
+		</s:RemoteObject>
+
+		<!-- 2016/02/24 DA ins start -->
+		<s:RemoteObject id="srvMstRegist" destination="mstRegistService">
+			<s:method name="isReservedVehicle" result="isReservedVehicle_resultHandler(event)" />
+		</s:RemoteObject>
+		<!-- 2016/02/24 DA ins end -->
+
+		<s:ArrayCollection id="ac" collectionChange="ac_collectionChangeHandler(event)" list="{grid.dataProvider as IList}" />
+
+	</fx:Declarations>
+	<s:HGroup width="100%" height="24" verticalAlign="middle" fontFamily="ＭＳ ゴシック">
+		<s:Label text="車種マスタメンテナンス" fontSize="14" fontWeight="bold"/>
+	</s:HGroup>
+	<s:HGroup width="100%" height="24" verticalAlign="middle" fontFamily="ＭＳ ゴシック">
+		<s:Button label="車種間マスタコピー"  id="btnVehicleCopy" fontSize="12" height="30" click="btnVehicleCopy_clickHandler(event)" tabIndex="5"/>
+	</s:HGroup>
+
+	<mx:AdvancedDataGrid id="grid" designViewDataType="flat" width="100%" height="100%"
+						 dataProvider="{srvMVehicle.getMVehicleMstRegist.lastResult}"
+						 editable="true" sortExpertMode="true" tabIndex="6"  draggableColumns="false"
+						 itemRollOver="grid_itemRollOverHandler(event)"
+						 itemEditBegin="grid_itemEditBeginHandler(event)"
+						 scroll="grid_scrollHandler(event)">
+		<mx:columns>
+			<mx:AdvancedDataGridColumn headerText="BC車種区分"  width="60" dataField="bctype" editable="true" sortable="false" itemRenderer="jp.co.ctc.components.BackgroundColorItemRenderer" paddingLeft="3"/>
+			<mx:AdvancedDataGridColumn headerText="車種名称" width="60" dataField="vehicleName" editable="true" sortable="false" itemRenderer="jp.co.ctc.components.BackgroundColorItemRenderer" paddingLeft="3"/>
+			<!-- 2016/02/24 DA ins start -->
+			<!-- 画像一覧出力OK -->
+			<mx:AdvancedDataGridColumn headerText="{resourceManager.getString('resource','cli1300002')}"  width="50" dataField="listOkFlag" editable="false" sortable="false" itemRenderer="jp.co.ctc.components.CheckBox" />
+			<!-- 2016/02/24 DA ins end -->
+			<mx:AdvancedDataGridColumn headerText="非表示"  width="50" dataField="endOfProd" editable="false" sortable="false" itemRenderer="jp.co.ctc.components.CheckBox" />
+		</mx:columns>
+	</mx:AdvancedDataGrid>
+
+	<s:HGroup width="100%" height="24" verticalAlign="middle" horizontalAlign="center" fontFamily="ＭＳ ゴシック">
+		<s:Button id="btnUpdate" height="30" label="保存" fontSize="12" click="btnUpdate_clickHandler(event)" tabIndex="7"/>
+		<s:Button id="btnExit" height="30" label="終了" fontSize="12" click="btnExit_clickHandler(event)" tabIndex="8"/>
+	</s:HGroup>
+
+</s:Application>

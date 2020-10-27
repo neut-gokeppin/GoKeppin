@@ -1,0 +1,323 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:mx="library://ns.adobe.com/flex/mx" width="600" height="600"
+			   pageTitle="LFA物流・組立 部品棚管理システム" creationComplete="application1_creationCompleteHandler(event)">
+	<s:layout>
+		<s:HorizontalLayout paddingLeft="8" paddingRight="8" paddingTop="8" paddingBottom="8" horizontalAlign="center" gap="8"/>
+	</s:layout>
+
+	<fx:Script>
+		<![CDATA[
+			import flash.net.navigateToURL;
+
+			import jp.co.ctc.entity.MUser;
+
+			import mx.controls.Alert;
+			import mx.effects.Pause;
+			import mx.events.CloseEvent;
+			import mx.events.FlexEvent;
+			import mx.events.Request;
+			import mx.managers.CursorManager;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+
+			//初期値として仮マスタを選択
+			private var selectMst:int = 0;
+			private var TITLE:String = "マスタメンテナンスメニュー";
+
+			private var loginUser:String = "CJ00000";
+			// CSV出力／取込用
+			private var fileReference:FileReference;
+
+			/**
+			 * 画面起動時の処理。
+			 * ユーザーコードの取得
+			 */
+			protected function application1_creationCompleteHandler(event:FlexEvent):void
+			{
+				// Alertのボタンの幅を変更
+				// デフォルトの60だと"キャンセル"の文字が表示しきれない。
+				Alert.buttonWidth = 100;
+
+				//ユーザーコードの取得
+				srvUser.getUserCode();
+			}
+
+
+			/**
+			 * ユーザーコードの取得後の処理。
+			 * 保持していなければログインページに戻す
+			 */
+			protected function getUserCode_resultHandler(event:ResultEvent):void
+			{
+				//ユーザコードがなければログインページに戻す
+				if (event.result==null) {
+					var request:URLRequest = new URLRequest("lg_login.html");
+					navigateToURL(request, "_self");
+				}
+				else{
+					loginUser = event.result.toString();
+					//セレクトマスタの取得
+					srvUser.getSelectMst();
+				}
+			}
+
+			/**
+			 * セレクトマスタ取得後の処理。
+			 * 本番or仮マスタのトグルボタンを押します。初期値は仮マスタに設定
+			 */
+			protected function getSelectMst_resultHandler(event:ResultEvent):void
+			{
+				//初めてこのページに遷移した時
+				if(event.result==null) {
+					selectMst = 0;
+				}
+				//戻ってきた時
+				else{
+					selectMst = parseInt(event.result.toString());
+				}
+
+				//ラジオボタンを選択
+				if(selectMst == 0) {
+					rbtTempo.selected = true ;
+					this.btnMstChange.enabled=true;
+					this.btnImportCsv.enabled=true;
+				}else{
+					rbtReal.selected = true ;
+					this.btnMstChange.enabled=false;
+					this.btnImportCsv.enabled=false;
+				}
+			}
+
+			/**
+			 * マスタ本番登録が完了した時の処理。
+			 */
+			protected function srvTempMstRegist_resultHandler(event:ResultEvent):void
+			{
+				if (event.result.toString() == "0") {
+					Alert.show("マスタの本番登録が完了しました。", TITLE);
+				} else {
+					Alert.show("マスタの本番登録ができませんでした。", TITLE);
+				}
+				// 操作を受け付けるようにする
+				CursorManager.removeBusyCursor();
+				vGroup.enabled = true;
+			}
+
+
+			/**
+			 * CSV出力ボタン押下時の処理。
+			 */
+			protected function btnExportCsv_clickHandler(event:MouseEvent):void
+			{
+				//遷移先の「selectMst」に値を渡す
+				var vars:URLVariables = new URLVariables();
+				vars.selectMst = selectMst;
+				vars.loginUser = loginUser;
+				vars.fromPage = "LgMasterMenu"
+				// CSV出力用URLの呼び出し
+				var request:URLRequest = new URLRequest("../csv/export");
+				request.data = vars;
+				navigateToURL(request);
+			}
+
+
+			/**
+			 * CSV取込ボタン押下時の処理。
+			 */
+			protected function btnImportCsv_clickHandler(event:MouseEvent):void
+			{
+				// 取り込み対象のファイルを選択する
+				fileReference = new FileReference();
+				fileReference.addEventListener(Event.SELECT, fileReference_selectHandler);
+				var fileFilter:FileFilter = new FileFilter("CSVファイル (*.csv)", "*.csv");
+				fileReference.browse([fileFilter]);
+			}
+
+
+			/**
+			 * ファイル選択時の処理。
+			 */
+			protected function fileReference_selectHandler(event:Event):void
+			{
+				// 操作を受け付けないようにする
+				CursorManager.setBusyCursor();
+				this.enabled = false;
+
+				// ファイルの読み込みを開始する
+				fileReference.addEventListener(Event.COMPLETE, fileReference_completeHandler);
+				fileReference.load();
+			}
+
+
+			/**
+			 * ファイル読み込み完了時の処理。
+			 */
+			protected function fileReference_completeHandler(event:Event):void
+			{
+				// サーバーにファイルを送信する
+				srv.lgImportCsv(fileReference.data);
+			}
+
+
+			/**
+			 * CSV取込処理が成功したときの処理。
+			 */
+			protected function srv_importCsv_resultHandler(event:ResultEvent):void
+			{
+				// 操作を受け付けるようにする
+				CursorManager.removeBusyCursor();
+				this.enabled = true;
+
+				// 完了メッセージ表示
+				Alert.show("CSV取込が完了しました",TITLE);
+			}
+
+			/**
+			 * CSV取込が失敗したときの処理。
+			 */
+			protected function srv_importCsv_faultHandler(event:FaultEvent):void
+			{
+				// 操作を受け付けるようにする
+				CursorManager.removeBusyCursor();
+				this.enabled = true;
+
+				// エラーメッセージ表示
+				Alert.show("選択されたファイルは取込出来ません。\n" +
+						   "対象のファイルはCSV出力したファイルのみです。"
+						   ,TITLE);
+			}
+
+
+			/**
+			 * 部品マスタメンテボタン押下時の処理。
+			 */
+			protected function btnItemMainte_clickHandler(event:MouseEvent):void
+			{
+				//セレクトマスタをセットしてページ遷移
+				srvUser.setSelectMst(selectMst);
+				var request:URLRequest = new URLRequest("lg_part_mainte.html");
+				navigateToURL(request, "_self");
+			}
+
+
+			/**
+			 * SPS台車マスタメンテボタン押下時の処理。
+			 */
+			protected function btnCarryMainte_clickHandler(event:MouseEvent):void
+			{
+				srvUser.setSelectMst(selectMst);
+				var request:URLRequest = new URLRequest("lg_sps_mainte.html");
+				navigateToURL(request, "_self");
+			}
+
+
+			/**
+			 * 指示マスタメンテボタン押下時の処理。
+			 */
+			protected function btnSignMainte_clickHandler(event:MouseEvent):void
+			{
+				srvUser.setSelectMst(selectMst);
+				var request:URLRequest = new URLRequest("lg_bcsign_mainte.html");
+				navigateToURL(request, "_self");
+			}
+
+			/**
+			 * 取出順マスタメンテボタン押下時の処理。
+			 */
+			protected function btnOrderMainte_clickHandler(event:MouseEvent):void
+			{
+				srvUser.setSelectMst(selectMst);
+				var request:URLRequest = new URLRequest("lg_part_order.html");
+				navigateToURL(request, "_self");
+			}
+
+			/**
+			 * 仮マスタ本番登録ボタン押下時の処理。
+			 */
+			protected function btnMstChange_clickHandler(event:MouseEvent):void
+			{
+				Alert.show("仮マスタを本番マスタへ登録します。\nよろしいですか？",
+					TITLE,
+					Alert.OK | Alert.CANCEL, this,
+					function(event:CloseEvent):void {
+						if (event.detail == Alert.OK) {
+							// 操作を受け付けないようにする
+							CursorManager.setBusyCursor();
+							vGroup.enabled = false;
+
+							srvTempLgMstRegist.TempLgMstRegist();
+							return;
+						}
+					}
+				);
+			}
+
+
+			/**
+			 * 仮マスタトグルボタン選択時の処理。
+			 */
+			protected function rbtTempo_clickHandler(event:MouseEvent):void
+			{
+				this.selectMst = 0;
+				this.btnMstChange.enabled=true;
+				this.btnImportCsv.enabled=true;
+			}
+
+			/**
+			 * 本番マスタトグルボタン選択時
+			 */
+			protected function rbtReal_clickHandler(event:MouseEvent):void
+			{
+				this.selectMst = 1;
+				this.btnMstChange.enabled=false;
+				this.btnImportCsv.enabled=false;
+			}
+
+			/**
+			 * 戻るボタン押下時の処理。
+			 */
+			protected function btnFanctionMenu_clickHandler(event:MouseEvent):void
+			{
+				srvUser.setSelectMst(selectMst);
+				var request:URLRequest = new URLRequest("lg_function_menu.html");
+				navigateToURL(request, "_self");
+			}
+
+		]]>
+	</fx:Script>
+
+	<fx:Declarations>
+		<!-- 非ビジュアルエレメント (サービス、値オブジェクトなど) をここに配置 -->
+		<s:RemoteObject id="srv" destination="csvService">
+			<s:method name="lgImportCsv" result="srv_importCsv_resultHandler(event)" fault="srv_importCsv_faultHandler(event)" />
+		</s:RemoteObject>
+
+		<s:RemoteObject id="srvUser" destination="lgMUserService">
+			<s:method name="getUserCode" result="getUserCode_resultHandler(event)"/>
+			<s:method name="getSelectMst" result="getSelectMst_resultHandler(event)"/>
+		</s:RemoteObject>
+
+		<s:RemoteObject id="srvTempLgMstRegist" destination="lgStoredFunctionService" result="srvTempMstRegist_resultHandler(event)" />
+	</fx:Declarations>
+	<s:VGroup id="vGroup" width="100%" height="100%"  horizontalAlign="center" gap="20">
+		<s:HGroup width="100%" horizontalAlign="left" height="24">
+			<s:Label text="組立マスタメンテナンスメニュー" fontFamily="ＭＳ ゴシック" fontSize="24" fontWeight="bold"/>
+		</s:HGroup>
+		<s:HGroup width="100%" horizontalAlign="center" height="24">
+			<s:RadioButton id="rbtTempo" label="仮マスタ" selected="true" skinClass="spark.skins.spark.ToggleButtonSkin" groupName="AA" height="30" width="100" fontFamily="ＭＳ ゴシック" fontSize="16" click="rbtTempo_clickHandler(event)" tabIndex="1"/>
+			<s:RadioButton id="rbtReal" label="本番マスタ" skinClass="spark.skins.spark.ToggleButtonSkin" groupName="AA" height="30" width="100" fontFamily="ＭＳ ゴシック" fontSize="16" click="rbtReal_clickHandler(event)" tabIndex="2"/>
+		</s:HGroup>
+		<s:Button label="部品マスタメンテナンス" fontSize="18" fontFamily="ＭＳ ゴシック" width="360" height="45" id="btnItemMainte" click="btnItemMainte_clickHandler(event)" tabIndex="3"/>
+		<s:Button label="指示マスタメンテナンス" fontSize="18" fontFamily="ＭＳ ゴシック" width="360" height="45" id="btnSignMainte" click="btnSignMainte_clickHandler(event)" tabIndex="5"/>
+		<s:Button label="取出順マスタメンテナンス" fontSize="18" fontFamily="ＭＳ ゴシック" width="360" height="45" id="btnOrderMainte" click="btnOrderMainte_clickHandler(event)" tabIndex="6"/>
+		<s:Button label="SPS台車マスタメンテナンス" fontSize="18" fontFamily="ＭＳ ゴシック" width="360" height="45" id="btnCarryMainte" click="btnCarryMainte_clickHandler(event)" tabIndex="4"/>
+		<s:Button label="仮マスタ本番登録" fontSize="18" fontFamily="ＭＳ ゴシック" width="360" height="45" enabled="true" id="btnMstChange" click="btnMstChange_clickHandler(event)" tabIndex="7"/>
+		<s:Button label="CSV出力" fontSize="18" fontFamily="ＭＳ ゴシック" width="360" height="45" id="btnExportCsv" click="btnExportCsv_clickHandler(event)" tabIndex="8"/>
+		<s:Button label="CSV取込" fontSize="18" fontFamily="ＭＳ ゴシック" width="360" height="45" id="btnImportCsv" click="btnImportCsv_clickHandler(event)" enabled="true" tabIndex="9"/>
+		<s:Button label="戻る" fontSize="18" fontFamily="ＭＳ ゴシック" width="360" height="45" id="btnFanctionMain" click="btnFanctionMenu_clickHandler(event)" tabIndex="10"/>
+	</s:VGroup>
+
+
+</s:Application>

@@ -1,0 +1,12 @@
+K 10
+svn:ignore
+V 9
+doc
+
+bin
+
+K 13
+svn:mergeinfo
+V 41
+/LFA/branches/4.2.0/lfa_android:2465-2486
+END

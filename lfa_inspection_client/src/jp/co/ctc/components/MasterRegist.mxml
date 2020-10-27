@@ -1,0 +1,1006 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!---
+ITAGE JYO 2013-04-16
+-->
+<s:MXAdvancedDataGridItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009"
+								  xmlns:s="library://ns.adobe.com/flex/spark"
+								  xmlns:mx="library://ns.adobe.com/flex/mx"
+								  focusEnabled="true"
+								  creationComplete="mxadvanceddatagriditemrenderer1_creationCompleteHandler(event)"
+								  dataChange="mxadvanceddatagriditemrenderer1_dataChangeHandler(event)"
+								  height="100%">
+
+	<fx:Style>
+		@namespace s "library://ns.adobe.com/flex/spark";
+		@namespace mx "library://ns.adobe.com/flex/mx";
+		.lblBooking {
+
+			top:0;
+			left:0;
+			right:0;
+			bottom:0;
+
+		}
+	</fx:Style>
+
+	<fx:Metadata>
+		[ResourceBundle("message")]
+		[ResourceBundle("resource")]
+	</fx:Metadata>
+	
+	<fx:Script>
+		<![CDATA[
+			import jp.co.ctc.entity.MReserve;
+			import jp.co.ctc.entity.MVehicle;
+			import jp.co.ctc.event.MasterRegistEvent;
+			import jp.co.ctc.event.MstSelectEvent;
+			import jp.co.ctc.util.MUserUtils;
+			import jp.co.ctc.util.Utils;
+			
+			import mx.controls.Alert;
+			import mx.controls.Button;
+			import mx.events.CloseEvent;
+			import mx.events.FlexEvent;
+			import mx.formatters.DateFormatter;
+			
+			import spark.components.Label;
+			import spark.components.supportClasses.ItemRenderer;
+
+			// 2016/02/24 DA del start
+//			/**
+//			 * 全体ボタン
+//			 */
+//			protected var btnBooking:Button;
+//			
+//			/**
+//			 * 検査順のみボタン
+//			 */
+//			protected var btnProcedure:Button;
+//			
+//			/**
+//			 * 予約中ラベル
+//			 */
+//			protected var lblBooking:Label;
+//			
+//			/**
+//			 * 解除ボタン
+//			 */
+//			protected var btnCancel:Button;
+//			
+//			/**
+//			 * 該当コンポーネントの初期化
+//			 *
+//			 */
+//			override protected function createChildren():void
+//			{
+//				super.createChildren();
+//				
+//				//
+//				//「予約中」ラベルを新規
+//				this.createLblBooking();
+//				
+//				// 「全体」ボタンを新規
+//				this.createBtnBooking();
+//				
+//				// 「検査順のみ」ボタンを新規
+//				this.createBtnProcedure();
+//				
+//				// 「解除」ボタンを新規
+//				this.createBtnCancel();
+//				
+//				//「解除」ボタン
+//				this.groupCancel.addElement(btnCancel);
+//				
+//			}
+//			
+//			/**
+//			 * 初期化のとき、イベントを設定
+//			 *
+//			 */
+//			protected function mxadvanceddatagriditemrenderer1_creationCompleteHandler(event:FlexEvent):void
+//			{
+//				
+//				this.btnCancel.addEventListener(MouseEvent.CLICK, btnCancel_clickHandler);
+//				
+//			}
+//			
+//			/**
+//			 * データが変更したら、該当コンポーネントを更新する
+//			 *
+//			 */
+//			protected function mxadvanceddatagriditemrenderer1_dataChangeHandler(event:FlexEvent):void
+//			{
+//				// データがなければ、何もしない
+//				if (this.listData == null) {
+//					return;
+//				}
+//				
+//				if (this.data == null) {
+//					return;
+//				}
+//				
+//				// 生産終了の場合、「予約」ボタンも「予約中」ラベルも「解除」ボタンも、全部表示されない
+//				if(this.data["endOfProd"] == true){
+//					
+//					this.btnBooking.visible = false;
+//					this.btnProcedure.visible = false;
+//					this.lblBooking.visible = false;
+//					this.btnCancel.visible = false;
+//					return ;
+//				}
+//				else
+//				{
+//					
+//					// 予約中の場合 いずれか切替組立連番、切替ボデーはデータがある。
+//					// 予約中の状態
+//					if(this.data["bookStatus"] == true){
+//						// 「予約中」の状態をセット
+//						this.setBookingStatus();
+//						
+//					}else{
+//						
+//						// 「未予約」の状態をセット
+//						this.setNotBookingStatus();
+//						
+//					}
+//					
+//					// 本番マスタ選択時は選択不可
+//					if (parentApplication.hasOwnProperty("selectMst") && parentApplication.selectMst == 1) {
+//						
+//						// 予約ボタンを選択不可
+//						if(this.groupBooking.getChildByName("btnBooking") != null){
+//							this.btnBooking.enabled = false;
+//						}
+//						
+//						// 検査順ボタンを選択不可
+//						if(this.groupBooking.getChildByName("btnProcedure") != null){
+//							this.btnProcedure.enabled = false;
+//						}
+//						
+//						//予約中ラベルを選択不可
+//						if(this.groupBooking.getChildByName("lblBooking") != null){
+//							this.lblBooking.enabled = false;
+//						}
+//						
+//						// 解除ボタンを選択不可
+//						this.btnCancel.enabled = false;
+//						
+//					}
+//				}
+//			}
+//			
+//			/**
+//			 * 「予約」ボタンのクリックイベント
+//			 *
+//			 */
+//			protected function btnBooking_clickHandler(event:MouseEvent):void
+//			{
+//				// 2016/02/24 DA ins start
+//				this.parentApplication.gridScrollPosition = this.parentApplication.grid.verticalScrollPosition; // 表示行を一時退避する
+//				// 2016/02/24 DA ins end
+//				
+//				//切替組立連番、切替ボデーNOの入力チャック
+//				if(    (data["bcnoH0"] != null && data["bcnoH0"] != "")
+//					&& (data["bodyNo"] != null && data["bodyNo"] != "") ){
+//					Alert.show("組立連番、ボデーNo.はどちらか一方を設定して下さい。", parentApplication.TITLE);
+//					return ;
+//					
+//				}
+//				
+//				// 切替組立連番と切替ボデーNOのどちらの入力も無い場合 仮マスタ本番登録処理（ストアドファンクション）を実行
+//				if(    (data["bcnoH0"] == null || data["bcnoH0"] == "" )
+//					&& (data["bodyNo"] == null || data["bodyNo"] == "" ) ){
+//					
+//					// イベント種別。押下したボタンが「全体」か「検査順のみ」かで分岐
+//					var immediateType:String;
+//					if (event.currentTarget == this.btnBooking) {
+//						immediateType = MasterRegistEvent.ImmediatelyUpdate;
+//					} else {
+//						immediateType = MasterRegistEvent.ImmediatelyProcedure;
+//					}
+//					
+//					Alert.show("仮マスタ本番登録（" + Button(event.currentTarget).label + "）を即時実行します。よろしいですか？", parentApplication.TITLE, Alert.OK | Alert.CANCEL,
+//						null, function(event2:CloseEvent):void {
+//							immediatelyUpdate(event2, immediateType);
+//						}
+//					);
+//					return ;
+//				}
+//				
+//				var params:MVehicle = new MVehicle();
+//				params.bctype = data["bctype"];
+//				params.vehicleName = data["vehicleName"];
+//				params.endOfProd = data["endOfProd"];
+//				params.bcnoH0 = data["bcnoH0"];
+//				params.bodyNo = data["bodyNo"];
+//				params.insertUser = data["insertUser"];
+//				params.insertDate = data["insertDate"];
+//				
+//				// イベント種別。押下したボタンが「全体」か「検査順のみ」かで分岐
+//				var bookType:String;
+//				if (event.currentTarget == this.btnBooking) {
+//					bookType = MasterRegistEvent.Book;
+//				} else {
+//					bookType = MasterRegistEvent.Procedure;
+//				}
+//				
+//				// 未検査車両有無チャック
+//				this.listData.owner.dispatchEvent(new MasterRegistEvent(bookType, listData.rowIndex, params));
+//				
+//			}
+//			
+//			
+//			/**
+//			 * 仮マスタ本番登録処理（ストアドファンクション）を実行
+//			 *
+//			 */
+//			private function immediatelyUpdate(event:CloseEvent, type:String):void
+//			{
+//				//
+//				if(event.detail == Alert.OK){
+//					
+//					var params:MVehicle = new MVehicle();
+//					params.bctype = data["bctype"];
+//					params.vehicleName = data["vehicleName"];
+//					params.endOfProd = data["endOfProd"];
+//					params.bcnoH0 = null;
+//					params.bodyNo = null;
+//					params.insertUser = data["insertUser"];
+//					params.insertDate = data["insertDate"];
+//					
+//					// 仮マスタ本番登録処理（ストアドファンクション）を実行するように、イベントを送出。
+//					this.listData.owner.dispatchEvent(new MasterRegistEvent(type, listData.rowIndex, params));
+//				}
+//				
+//			}
+//			
+//			
+//			/**
+//			 * 「解除」ボタンのクリックイベント
+//			 */
+//			protected function btnCancel_clickHandler(event:MouseEvent):void
+//			{
+//				Alert.show("仮マスタ本番登録の予約を取り消します。よろしいですか？", parentApplication.TITLE, Alert.OK | Alert.CANCEL,
+//					null, cancelAlertCloseEventHandler);
+//				
+//				// 2016/02/24 DA ins start
+//				this.parentApplication.gridScrollPosition = this.parentApplication.grid.verticalScrollPosition; // 表示行を一時退避する
+//				// 2016/02/24 DA ins end
+//			}
+//			
+//			/**
+//			 * 予約解除
+//			 *
+//			 */
+//			private function cancelAlertCloseEventHandler(event:CloseEvent):void
+//			{
+//				//
+//				if(event.detail == Alert.OK){
+//					
+//					var params:MVehicle = new MVehicle();
+//					params.bctype = data["bctype"];
+//					params.vehicleName = data["vehicleName"];
+//					params.endOfProd = data["endOfProd"];
+//					params.bcnoH0 = null;
+//					params.bodyNo = null;
+//					params.insertUser = data["insertUser"];
+//					params.insertDate = data["insertDate"];
+//					
+//					// 未予約」の状態をセットするように、イベントを送出。
+//					this.listData.owner.dispatchEvent(new MasterRegistEvent(MasterRegistEvent.Cancel,this.listData.rowIndex, params));
+//				}
+//				
+//			}
+//			
+//			/**
+//			 *「予約中」の状態をセット
+//			 *
+//			 */
+//			protected function setBookingStatus():void {
+//				
+//				// 予約
+//				if(this.groupBooking.getChildByName("btnBooking") != null){
+//					this.btnBooking.removeEventListener(MouseEvent.CLICK,btnBooking_clickHandler);
+//					this.groupBooking.removeElement(this.btnBooking);
+//					
+//				}
+//				
+//				// 検査順
+//				if(this.groupBooking.getChildByName("btnProcedure") != null){
+//					this.btnProcedure.removeEventListener(MouseEvent.CLICK,btnBooking_clickHandler);
+//					this.groupBooking.removeElement(this.btnProcedure);
+//				}
+//				
+//				this.groupBooking.addElement(this.lblBooking);
+//				this.lblBooking.visible=true;
+//				
+//				// 予約中の場合は、「解除」ボタンが表示される。
+//				this.btnCancel.visible = true;
+//			}
+//			
+//			/**
+//			 *「未予約」の状態をセット
+//			 *
+//			 */
+//			protected function setNotBookingStatus():void {
+//				
+//				//
+//				if(this.groupBooking.getChildByName("lblBooking") != null){
+//					this.groupBooking.removeElement(this.lblBooking);
+//				}
+//				
+//				this.btnBooking.addEventListener(MouseEvent.CLICK, btnBooking_clickHandler);
+//				this.btnProcedure.addEventListener(MouseEvent.CLICK, btnBooking_clickHandler);
+//				
+//				this.groupBooking.addElement(this.btnBooking);
+//				this.groupBooking.addElement(this.btnProcedure);
+//				
+//				this.btnBooking.visible = true;
+//				this.btnProcedure.visible = true;
+//				
+//				// 未予約中の場合は、「解除」ボタンが表示されない。
+//				this.btnCancel.visible = false;
+//			}
+//			
+//			/**
+//			 * 「全体」ボタンを新規
+//			 *
+//			 */
+//			private function createBtnBooking():void {
+//				
+//				this.btnBooking = new Button();
+//				this.btnBooking.label = "全体";
+//				this.btnBooking.height = 24;
+//				this.btnBooking.id = "btnBooking";
+//				this.btnBooking.name = "btnBooking";
+//				
+//			}
+//			
+//			/**
+//			 * 「検査順のみ」ボタンを新規
+//			 *
+//			 */
+//			private function createBtnProcedure():void {
+//				
+//				this.btnProcedure = new Button();
+//				this.btnProcedure.label = "検査順のみ";
+//				this.btnProcedure.height = 24;
+//				this.btnProcedure.id = "btnProcedure";
+//				this.btnProcedure.name = "btnProcedure";
+//				
+//			}
+//			
+//			/**
+//			 * 「予約中」ラベルを新規
+//			 *
+//			 */
+//			private function createLblBooking():void {
+//				
+//				this.lblBooking = new Label();
+//				this.lblBooking.text = "予約中";
+//				this.lblBooking.id = "lblBooking";
+//				this.lblBooking.name = "lblBooking";
+//				//this.lblBooking.styleName = "lblBooking";
+//				
+//			}
+//			
+//			/**
+//			 * 「解除」ボタンを新規
+//			 *
+//			 */
+//			private function createBtnCancel():void {
+//				
+//				this.btnCancel = new Button();
+//				this.btnCancel.label = "解除";
+//				this.btnCancel.height = 24;
+//				this.btnCancel.id = "btnCancel";
+//				this.btnCancel.name = "btnCancel";
+//				this.btnCancel.visible = false;
+//			}
+			// 2016/02/24 DA del end
+
+			// 2016/02/24 DA ins start
+			/**
+			 * 全体ボタン
+			 */
+			protected var btnCheckAll:Button;
+			
+			/**
+			 * 検査順のみボタン
+			 */
+			protected var btnCheckInspec:Button;
+			/**
+			 * 予約ボタン
+			 */
+			protected var btnReserve:Button;
+			
+			/**
+			 * 予約解除ボタン
+			 */
+			protected var btnReserveCancel:Button;
+			
+			/**
+			 * 予約日時ラベル
+			 */
+			protected var lblReserveDate:Label;
+			
+			/**
+			 * 予約内容ラベル
+			 */
+			protected var lblRegistrationMethod:Label;
+			
+			/**
+			 * 予約者ラベル
+			 */
+			protected var lblReserveUser:Label;
+
+			/**
+			 * 該当コンポーネントの初期化
+			 *
+			 */
+			override protected function createChildren():void
+			{
+				super.createChildren();
+
+				// 「全体」ボタンを新規
+				this.createBtnCheckAll();
+
+				// 「検査順のみ」ボタンを新規
+				this.createBtnCheckInspec();
+
+				// 「予約」ボタンを新規
+				this.createBtnReserve();
+				
+				// 「予約解除」ボタンを新規
+				this.createBtnReserveCancel();
+				
+				// 「予約日時」ラベルを新規
+				this.createLblReserveDate();
+				
+				// 「予約内容」ラベルを新規
+				this.createLblRegistrationMethod();
+				
+				// 「予約者」ラベルを新規
+				this.createLblReserveUser();
+			}
+
+			/**
+			 * 初期化のとき、イベントを設定
+			 *
+			 */
+			protected function mxadvanceddatagriditemrenderer1_creationCompleteHandler(event:FlexEvent):void
+			{
+			}
+			
+			/**
+			 * データが変更したら、該当コンポーネントを更新する
+			 *
+			 */
+			protected function mxadvanceddatagriditemrenderer1_dataChangeHandler(event:FlexEvent):void
+			{
+				// データがなければ、何もしない
+				if (this.listData == null) {
+					return;
+				}
+				
+				if (this.data == null) {
+					return;
+				}
+				
+				var reserve:MReserve = this.data["mReserve"];
+//				if (reserve == null) {
+//					this.btnCheckAll.visible = false;
+//					this.btnCheckInspec.visible = false;
+//					this.btnReserve.visible = false;
+//					this.btnReserveCancel.visible = false;
+//					this.lblReserveDate.visible = false;
+//					this.lblRegistrationMethod.visible = false;
+//					this.lblReserveUser.visible = false;
+//					return;
+//				}
+				
+				// オブジェクトを可視化にする
+				this.btnCheckAll.visible = true;
+				this.btnCheckInspec.visible = true;
+				this.btnReserve.visible = true;
+				this.btnReserveCancel.visible = true;
+				this.lblReserveDate.visible = true;
+				this.lblRegistrationMethod.visible = true;
+				this.lblReserveUser.visible = true;
+				
+				// 画面のオブジェクトを削除
+				this.removeReserveItem();
+				
+				// オブジェクトの状態設定
+				this.setReserveStatus(reserve);
+				
+				// オブジェクトを画面に追加
+				this.addReserveItem();
+
+				// 指示記号の予約中の状態を取得、予約中の場合、ボタンを非活性にする。
+				if(this.data["bcsignReserve"] == true){
+					this.btnCheckAll.enabled = false;
+					this.btnCheckInspec.enabled = false;
+					this.btnReserve.enabled = false;
+					this.btnReserveCancel.enabled = false;
+				//	ItemRenderer(event.currentTarget).enabled = false;
+				//}
+				//else {
+				//	ItemRenderer(event.currentTarget).enabled = true;
+				}
+
+				// 2016/02/24 DA ins start
+				//ユーザー権限チェック
+				// 仮マスタ本番登録画面
+				// ※【注意】ここで活性にする場合は、すでに非活性であることの考慮を確認すること
+				if(parentApplication.className == "master_regist") {
+					if(parentApplication.hasOwnProperty("loginUserInfo")) {
+						// 検査員 OR 検査職制本番不可の場合
+						if(MUserUtils.isExaminer(parentApplication.loginUserInfo) || MUserUtils.OfficeOrganizationNot(parentApplication.loginUserInfo)) {
+							this.btnCheckAll.enabled = false;
+							this.btnCheckInspec.enabled = false;
+							this.btnReserve.enabled = false;
+							this.btnReserveCancel.enabled = false;
+						}
+						else if(MUserUtils.OfficeOrganization(parentApplication.loginUserInfo)) {
+							// 検査職制本番可の場合
+							this.btnCheckAll.enabled = false;
+							if (this.btnReserve.enabled) {
+								this.btnCheckInspec.enabled = true;
+							}
+							
+							// 仮0マスタ以外は不可
+							if(parentApplication.hasOwnProperty("selectMst") && MstSelectEvent.isTemporary0(parentApplication.selectMst) == false) {
+								this.btnCheckInspec.enabled = false;
+								this.btnReserve.enabled = false;
+								this.btnReserveCancel.enabled = false;
+							}
+						}
+					}
+				}
+				// 2016/02/24 DA ins end
+
+			}
+
+			/**
+			 * 予約フラグにより、オブジェクトの状態を設定
+			 *
+			 */
+			protected function setReserveStatus(reserve:MReserve):void {
+				
+				if(this.data["endOfProd"] == true){
+					// 2016/08/10 DA upd start
+//					// 編集不可のとき、ラベルを表示
+//					// 「全体」ボタン
+//					this.btnCheckAll.enabled = false;
+//					this.btnCheckAll.removeEventListener(MouseEvent.CLICK, btnCheck_clickHandler);
+//					// 「検査順のみ」ボタン
+//					this.btnCheckInspec.enabled = false;
+//					this.btnCheckInspec.removeEventListener(MouseEvent.CLICK, btnCheck_clickHandler);
+//					// 「予約」ボタン
+//					this.btnReserve.enabled = false;
+//					this.btnReserve.removeEventListener(MouseEvent.CLICK, btnReserve_clickHandler);
+//					// 「予約解除」ボタン
+//					this.btnReserveCancel.enabled = false;
+//					this.btnReserveCancel.removeEventListener(MouseEvent.CLICK,btnReserve_clickHandler);
+					
+					// 生産終了のとき、ラベルを非表示
+					// 「全体」ボタン
+					this.btnCheckAll.visible = false;
+					this.btnCheckAll.removeEventListener(MouseEvent.CLICK, btnCheck_clickHandler);
+					// 「検査順のみ」ボタン
+					this.btnCheckInspec.visible = false;
+					this.btnCheckInspec.removeEventListener(MouseEvent.CLICK, btnCheck_clickHandler);
+					// 「予約」ボタン
+					this.btnReserve.visible = false;
+					this.btnReserve.removeEventListener(MouseEvent.CLICK, btnReserve_clickHandler);
+					// 「予約解除」ボタン
+					this.btnReserveCancel.visible = false;
+					this.btnReserveCancel.removeEventListener(MouseEvent.CLICK, btnReserve_clickHandler);
+					// 2016/08/10 DA upd end
+				}
+				else
+				{
+					// 本番マスタの場合、入力できないように設定する
+					if(parentApplication.hasOwnProperty("selectMst") && MstSelectEvent.isReal(parentApplication.selectMst)) {
+						// 編集不可のとき、ラベルを表示
+						// 「全体」ボタン
+						this.btnCheckAll.enabled = false;
+						this.btnCheckAll.removeEventListener(MouseEvent.CLICK, btnCheck_clickHandler);
+						// 「検査順のみ」ボタン
+						this.btnCheckInspec.enabled = false;
+						this.btnCheckInspec.removeEventListener(MouseEvent.CLICK, btnCheck_clickHandler);
+						// 「予約」ボタン
+						this.btnReserve.enabled = false;
+						this.btnReserve.removeEventListener(MouseEvent.CLICK, btnReserve_clickHandler);
+						// 「予約解除」ボタン
+						this.btnReserveCancel.enabled = false;
+						this.btnReserveCancel.removeEventListener(MouseEvent.CLICK,btnReserve_clickHandler);
+					}
+					else {
+						// 予約情報がないの場合、入力できないように設定する
+						if (reserve == null) {
+							// 「全体」ボタン
+							this.btnCheckAll.enabled = true;
+							this.btnCheckAll.addEventListener(MouseEvent.CLICK, btnCheck_clickHandler);
+							// 「検査順のみ」ボタン
+							this.btnCheckInspec.enabled = true;
+							this.btnCheckInspec.addEventListener(MouseEvent.CLICK, btnCheck_clickHandler);
+							// 「予約」ボタン
+							this.btnReserve.enabled = true;
+							this.btnReserve.addEventListener(MouseEvent.CLICK, btnReserve_clickHandler);
+							// 「予約解除」ボタン
+							this.btnReserveCancel.enabled = false;
+							this.btnReserveCancel.removeEventListener(MouseEvent.CLICK,btnReserve_clickHandler);
+						}
+						else {
+							// ボタン状態判定
+							if (reserve.reserveFlag == "0" || reserve.reserveFlag == "3" || reserve.reserveFlag == "4"){
+								// 予約中（予約フラグ="0" or 予約フラグ="3" or 予約フラグ="4"）の場合、活性にする。
+								// 「全体」ボタン
+								this.btnCheckAll.enabled = true;
+								this.btnCheckAll.addEventListener(MouseEvent.CLICK, btnCheck_clickHandler);
+								// 「検査順のみ」ボタン
+								this.btnCheckInspec.enabled = true;
+								this.btnCheckInspec.addEventListener(MouseEvent.CLICK, btnCheck_clickHandler);
+								// 「予約」ボタン
+								this.btnReserve.enabled = true;
+								this.btnReserve.addEventListener(MouseEvent.CLICK, btnReserve_clickHandler);
+								
+								// 予約中（予約フラグ="0" or 予約フラグ="3" or 予約フラグ="4"）の場合、非活性にする。
+								// 「予約解除」ボタン
+								this.btnReserveCancel.enabled = false;
+								this.btnReserveCancel.removeEventListener(MouseEvent.CLICK,btnReserve_clickHandler);
+							}
+							else if (reserve.reserveFlag == "1"){
+								// 予約中（予約フラグ="1"）の場合、非活性にする。
+								// 「全体」ボタン
+								this.btnCheckAll.enabled = false;
+								this.btnCheckAll.removeEventListener(MouseEvent.CLICK, btnCheck_clickHandler);
+								// 「検査順のみ」ボタン
+								this.btnCheckInspec.enabled = false;
+								this.btnCheckInspec.removeEventListener(MouseEvent.CLICK, btnCheck_clickHandler);
+								// 「予約」ボタン
+								this.btnReserve.enabled = false;
+								this.btnReserve.removeEventListener(MouseEvent.CLICK, btnReserve_clickHandler);
+								
+								// 予約中（予約フラグ="1"）の場合、活性にする。
+								// 「予約解除」ボタン
+								this.btnReserveCancel.enabled = true;
+								this.btnReserveCancel.addEventListener(MouseEvent.CLICK, btnReserve_clickHandler);
+							}
+						}
+					}
+				}
+				
+				if (reserve != null) {
+					// ラベル状態判定
+					if (reserve.reserveFlag == "0" || reserve.reserveFlag == "4"){
+						// 「予約日時」ラベル
+						this.lblReserveDate.text = "";
+						// 「予約内容」ラベル
+						this.lblRegistrationMethod.text = "";
+						// 「予約者」ラベル
+						this.lblReserveUser.text = ""; 
+					}
+					else {
+						// 「予約日時」ラベル
+						this.lblReserveDate.text = getReserveDate(reserve.reserveDate);
+						// 「予約内容」ラベル
+						this.lblRegistrationMethod.text = getRegistrationMethod(reserve.registrationMethod);
+						// 「予約者」ラベル
+						this.lblReserveUser.text = (reserve.mUser == null ? data.updateUser : reserve.mUser.userName); 
+						
+						if(reserve.reserveFlag == "3") {
+							this.lblReserveDate.setStyle("color", resourceManager.getInt('resource','reservationCompletion'));
+							this.lblRegistrationMethod.setStyle("color", resourceManager.getInt('resource','reservationCompletion'));
+							this.lblReserveUser.setStyle("color", resourceManager.getInt('resource','reservationCompletion'));
+						} else {
+							this.lblReserveDate.setStyle("color", 0);
+							this.lblRegistrationMethod.setStyle("color", 0);
+							this.lblReserveUser.setStyle("color", 0);
+						}
+					}
+				}
+				else {
+					// 「予約日時」ラベル
+					this.lblReserveDate.text = "";
+					// 「予約内容」ラベル
+					this.lblRegistrationMethod.text = "";
+					// 「予約者」ラベル
+					this.lblReserveUser.text = ""; 
+				}
+				
+				// 2016/08/10 DA ins start
+				if(this.data["endOfProd"] == true){
+					// 生産終了のとき、ラベルを非表示
+					// 「予約日時」ラベル
+					this.lblReserveDate.text = "";
+					// 「予約内容」ラベル
+					this.lblRegistrationMethod.text = "";
+					// 「予約者」ラベル
+					this.lblReserveUser.text = "";
+				}
+				// 2016/08/10 DA ins end
+			}
+			
+			/**
+			 * 画面のオブジェクトを削除
+			 *
+			 */
+			protected function removeReserveItem():void {
+				// 「全体」ボタンを削除
+				if(this.groupBooking.getChildByName("btnBooking") != null){
+					this.btnCheckAll.removeEventListener(MouseEvent.CLICK,btnCheck_clickHandler);
+					this.groupBooking.removeElement(this.btnCheckAll);
+				}
+				// 「検査順のみ」ボタンを削除
+				if(this.groupBooking.getChildByName("btnProcedure") != null){
+					this.btnCheckInspec.removeEventListener(MouseEvent.CLICK,btnCheck_clickHandler);
+					this.groupBooking.removeElement(this.btnCheckInspec);
+				}
+				// 「予約」ボタンを削除
+				if(this.groupBooking.getChildByName("btnReserve") != null){
+					this.btnReserve.removeEventListener(MouseEvent.CLICK,btnReserve_clickHandler);
+					this.groupBooking.removeElement(this.btnReserve);
+				}
+				// 「予約解除」ボタンを削除
+				if(this.groupBooking.getChildByName("btnReserveCancel") != null){
+					this.btnReserveCancel.removeEventListener(MouseEvent.CLICK,btnReserve_clickHandler);
+					this.groupBooking.removeElement(this.btnReserveCancel);
+				}
+				// 「予約日時」ラベルを削除
+				if(this.groupBooking.getChildByName("lblReserveDate") != null){
+					this.groupBooking.removeElement(this.lblReserveDate);
+				}
+				// 「予約内容」ラベルを削除
+				if(this.groupBooking.getChildByName("lblRegistrationMethod") != null){
+					this.groupBooking.removeElement(this.lblRegistrationMethod);
+				}
+				// 「予約者」ラベルを削除
+				if(this.groupBooking.getChildByName("lblReserveUser") != null){
+					this.groupBooking.removeElement(this.lblReserveUser);
+				}
+			}
+			/**
+			 * オブジェクトを画面に追加
+			 *
+			 */
+			protected function addReserveItem():void {
+				// 「全体」ボタン
+				this.groupBooking.addElement(this.btnCheckAll);
+				// 「検査順のみ」ボタン
+				this.groupBooking.addElement(this.btnCheckInspec);
+				// 「予約」ボタン
+				this.groupBooking.addElement(this.btnReserve);
+				// 「予約解除」ボタン
+				this.groupBooking.addElement(this.btnReserveCancel);
+				// 「予約日時」ラベルを新規
+				this.groupBooking.addElement(this.lblReserveDate);
+				// 「予約内容」ラベルを新規
+				this.groupBooking.addElement(this.lblRegistrationMethod);
+				// 「予約者」ラベルを新規
+				this.groupBooking.addElement(this.lblReserveUser);
+			}
+
+			/**
+			 * 「全体」、「検査順のみ」ボタンのクリックイベント
+			 *
+			 */
+			protected function btnCheck_clickHandler(event:MouseEvent):void
+			{
+				this.parentApplication.gridScrollPosition = this.parentApplication.grid.verticalScrollPosition; // 表示行を一時退避する
+				
+				// 本番登録ライン入力有無パラメータ判定
+				if (resourceManager.getBoolean('resource','lineInputExistence')) {
+					// ライン項目有り
+					if(Utils.isEmpty(data["line"])){
+						// ライン入力無し
+						// ラインを入力してください。
+						Alert.show(resourceManager.getString('message','msg00027'), parentApplication.TITLE);
+						return ;
+					}
+					else {
+						// ライン入力有り
+						if(!Utils.isEmpty(data["bcnoH0"]) && !Utils.isEmpty(data["bodyNo"])) {
+							// 組立連番、ボデーNo.はどちらか一方を設定して下さい。
+							Alert.show(resourceManager.getString('message','msg00026'), parentApplication.TITLE);
+							return ;
+						}
+					}	
+				}
+				else {
+					// ライン項目無し
+					if(!Utils.isEmpty(data["bcnoH0"]) && !Utils.isEmpty(data["bodyNo"])) {
+						// 組立連番、ボデーNo.はどちらか一方を設定して下さい。
+						Alert.show(resourceManager.getString('message','msg00026'), parentApplication.TITLE);
+						return ;
+					}
+				}
+
+				var params:MVehicle = new MVehicle();
+				params.bctype = data["bctype"];
+				params.vehicleName = data["vehicleName"];
+				params.endOfProd = data["endOfProd"];
+				params.line = data["line"];
+				params.bcnoH0 = data["bcnoH0"];
+				params.bodyNo = data["bodyNo"];
+				params.insertUser = data["insertUser"];
+				params.insertDate = data["insertDate"];
+
+				// イベント種別。押下したボタンが「全体」か「検査順のみ」かで分岐
+				var bookType:String;
+				if (event.currentTarget == this.btnCheckAll) {
+					bookType = MasterRegistEvent.CheckAll;
+				} else {
+					bookType = MasterRegistEvent.CheckInspec;
+				}
+
+				// 未検査車両有無チャック
+				this.listData.owner.dispatchEvent(new MasterRegistEvent(bookType, listData.rowIndex, params));
+			}
+			
+			/**
+			 * 「予約」、「予約解除」ボタンのクリックイベント
+			 *
+			 */
+			protected function btnReserve_clickHandler(event:MouseEvent):void
+			{
+				this.parentApplication.gridScrollPosition = this.parentApplication.grid.verticalScrollPosition; // 表示行を一時退避する
+				
+				// イベント種別。押下したボタンが「予約」か「予約解除」かで分岐
+				var bookType:String;
+				if (event.currentTarget == this.btnReserve) {
+					// 入力チェック
+					// 本番登録ライン入力有無パラメータ判定
+					if (resourceManager.getBoolean('resource','lineInputExistence')) {
+						// ライン項目有り
+						if(!Utils.isEmpty(data["bcnoH0"]) || !Utils.isEmpty(data["bodyNo"]) || !Utils.isEmpty(data["line"])) {
+							// ライン、組立連番、ボデーNOのいずれかに入力があるため予約できません。
+							Alert.show(resourceManager.getString('message','msg00003'), parentApplication.TITLE);
+							return ;
+						}
+					}
+					else {
+						// ライン項目無し
+						if(!Utils.isEmpty(data["bcnoH0"]) || !Utils.isEmpty(data["bodyNo"])) {
+							// 組立連番、ボデーNOのいずれかに入力があるため予約できません。
+							Alert.show(resourceManager.getString('message','msg00047'), parentApplication.TITLE);
+							return ;
+						}
+					}
+					bookType = MasterRegistEvent.Reserve;
+				} else {
+					bookType = MasterRegistEvent.ReserveCancel;
+				}
+				
+				// 画面情報収集
+				var params:MVehicle = new MVehicle();
+				params.bctype = data["bctype"];
+				params.vehicleName = data["vehicleName"];
+				params.endOfProd = data["endOfProd"];
+				params.line = data["line"];
+				params.bcnoH0 = data["bcnoH0"];
+				params.bodyNo = data["bodyNo"];
+				params.insertUser = data["insertUser"];
+				params.insertDate = data["insertDate"];
+				
+				// 未検査車両有無チャック
+				this.listData.owner.dispatchEvent(new MasterRegistEvent(bookType, listData.rowIndex, params));
+			}
+
+			/**
+			 * 「全体」ボタンを新規
+			 */
+			private function createBtnCheckAll():void {
+				this.btnCheckAll = new Button();
+				this.btnCheckAll.label = resourceManager.getString('resource','cli0800004');;
+				this.btnCheckAll.height = 24;
+				this.btnCheckAll.id = "btnCheckAll";
+				this.btnCheckAll.name = "btnCheckAll";
+				this.btnCheckAll.width = 85;
+			}
+			/**
+			 * 「検査順のみ」ボタンを新規
+			 */
+			private function createBtnCheckInspec():void {
+				this.btnCheckInspec = new Button();
+				this.btnCheckInspec.label = resourceManager.getString('resource','cli0800005');;
+				this.btnCheckInspec.height = 24;
+				this.btnCheckInspec.id = "btnCheckInspec";
+				this.btnCheckInspec.name = "btnCheckInspec";
+				this.btnCheckInspec.width = 85;
+			}
+			/**
+			 * 「予約」ボタンを新規
+			 */
+			private function createBtnReserve():void {
+				this.btnReserve = new Button();
+				this.btnReserve.label = resourceManager.getString('resource','cli0800006');;
+				this.btnReserve.height = 24;
+				this.btnReserve.id = "btnReserve";
+				this.btnReserve.name = "btnReserve";
+				this.btnReserve.width = 85;
+			}
+			/**
+			 * 「予約解除」ボタンを新規
+			 */
+			private function createBtnReserveCancel():void {
+				this.btnReserveCancel = new Button();
+				this.btnReserveCancel.label = resourceManager.getString('resource','cli0800007');;
+				this.btnReserveCancel.height = 24;
+				this.btnReserveCancel.id = "btnReserveCancel";
+				this.btnReserveCancel.name = "btnReserveCancel";
+				this.btnReserveCancel.width = 85;
+			}
+			/**
+			 * 「予約日時」ラベルを新規
+			 */
+			private function createLblReserveDate():void {
+				this.lblReserveDate = new Label();
+				this.lblReserveDate.text = "";
+				this.lblReserveDate.id = "lblReserveDate";
+				this.lblReserveDate.name = "lblReserveDate";
+				this.lblReserveDate.width = 100;
+			}
+			/**
+			 * 「予約内容」ラベルを新規
+			 */
+			private function createLblRegistrationMethod():void {
+				this.lblRegistrationMethod = new Label();
+				this.lblRegistrationMethod.text = "";
+				this.lblRegistrationMethod.id = "lblRegistrationMethod";
+				this.lblRegistrationMethod.name = "lblRegistrationMethod";
+				this.lblRegistrationMethod.width = 60;
+			}
+			/**
+			 * 「予約者」ラベルを新規
+			 */
+			private function createLblReserveUser():void {
+				this.lblReserveUser = new Label();
+				this.lblReserveUser.text = "";
+				this.lblReserveUser.id = "lblReserveUser";
+				this.lblReserveUser.name = "lblReserveUser";
+				this.lblReserveUser.width = 120;
+			}
+			/**
+			 * 「予約日」を取得
+			 */
+			private function getReserveDate(reserve_date:Date):String{
+				if (reserve_date　== null){
+					return "";
+				}
+				
+				var formatter:DateFormatter = new DateFormatter();
+				formatter.formatString = 'YYYY/MM/DD JJ:NN';
+				return formatter.format(reserve_date);
+			}
+			/**
+			 * 「本番登録方法」を取得
+			 */
+			private function getRegistrationMethod(registration_method:String):String{
+				if (Utils.isEmpty(registration_method)){
+					return "";
+				}
+				else if (registration_method == "0"){
+					// 「全体」
+					return resourceManager.getString('resource','cli0800002');
+				}
+				else if (registration_method == "1"){
+					// 「検査順」
+					return resourceManager.getString('resource','cli0800003');
+				}
+				else {
+					return "";
+				}
+			}
+			// 2016/02/24 DA ins end
+
+		]]>
+	</fx:Script>
+
+	<s:HGroup width="100%" height="24" gap="0" clipAndEnableScrolling="true">
+		<s:HGroup id="groupBooking" name="groupBooking" width="67%" height="24" verticalAlign="middle" horizontalAlign="center" paddingRight="0" paddingLeft="2" paddingTop="0" paddingBottom="0">
+		</s:HGroup>
+	</s:HGroup>
+</s:MXAdvancedDataGridItemRenderer>

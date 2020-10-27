@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="fill_parent"
+    android:layout_height="fill_parent"
+    android:orientation="vertical" >
+
+    <TextView
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:text="工程"
+        android:paddingLeft="2mm"
+        android:textSize="25sp" />
+
+    
+    <LinearLayout
+        android:id="@+id/LinearLayout01"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:paddingLeft="2mm"
+        android:paddingRight="2mm" >
+
+       <!--  <TextView
+            android:id="@+id/TextView03"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@color/RED"
+            android:text="グループ"
+            android:textColor="@color/BLACK"
+            android:textSize="20sp" >
+        </TextView>
+
+        <TextView
+            android:id="@+id/TextView04"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@color/RED"
+            android:text="状態"
+            android:textColor="@color/BLACK"
+            android:textSize="20sp" >
+        </TextView> -->
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/LinearLayout03"
+        android:layout_width="fill_parent"
+        android:layout_height="fill_parent"
+        android:layout_weight="1.5"
+        android:paddingLeft="2mm"
+        android:paddingRight="0.5mm" >
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/LinearLayout02"
+        android:layout_width="fill_parent"
+        android:layout_height="fill_parent"
+        android:layout_weight="5"
+        android:gravity="bottom" >
+
+        <Button
+            android:id="@+id/BL_BT_OK"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="OK" >
+        </Button>
+
+      <!--   <TextView
+            android:id="@+id/TextView01"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@+id/TextView01"
+            android:visibility="invisible" >
+        </TextView> -->
+
+        <Button
+            android:id="@+id/BL_BT_CANCEL"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:enabled="true"
+            android:text="キャンセル" >
+        </Button>
+    </LinearLayout>
+
+</LinearLayout>

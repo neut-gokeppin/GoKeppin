@@ -1,0 +1,339 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:fx="http://ns.adobe.com/mxml/2009"
+		 xmlns:s="library://ns.adobe.com/flex/spark"
+		 xmlns:mx="library://ns.adobe.com/flex/mx" width="300" height="190"
+		 creationComplete="application1_creationCompleteHandler(event)"
+		 close="titlewindow1_closeHandler(event)" enabled="true" 
+		 title="{resourceManager.getString('resource','cli1600007')}">
+	<!-- 予約日 -->
+	<s:Label x="20" y="13" text="{resourceManager.getString('resource','cli1600001')}"/>
+	<s:TextInput x="20" y="27" width="160" text="" id="dummy" displayAsPassword="true" visible="false"/>
+	<mx:DateField x="20" y="27" width="160" id="dfReserveDate" formatString="YYYY/MM/DD" /> 
+	<!-- 予約時刻 -->
+	<s:Label x="20" y="65" text="{resourceManager.getString('resource','cli1600002')}"/>
+	<s:NumericStepper x="20" y="79" width="40" id="nsReserveHour" minimum="0" maximum="23" />
+	<s:Label x="65" y="85" width="20" text="："/>
+	<s:NumericStepper x="90" y="79" width="40" id="nsReserveMinute" minimum="0" maximum="59" />
+	<!-- 仮マスタ本番画面用 -->
+	<s:Button x="20" y="115" id="btnInspecAll" label="{resourceManager.getString('resource','cli1600003')}" click="btn_clickHandler('0');" width="80"/>
+	<s:Button x="105" y="115" id="btnInspecSort" label="{resourceManager.getString('resource','cli1600004')}" click="btn_clickHandler('1');" width="80"/>
+	<s:Button x="190" y="115" id="btnInspecCancel" label="{resourceManager.getString('resource','cli1600006')}" click="closeWindow(-1);" width="80"/>
+	<!-- 指示記号マスタメンテナンス画面用 -->
+	<s:Button x="20" y="115" id="btnOK" label="{resourceManager.getString('resource','cli1600005')}" click="btn_clickHandler('2');" width="130"/>
+	<s:Button x="155" y="115" id="btnCancel" label="{resourceManager.getString('resource','cli1600006')}" click="closeWindow(-1);" width="130"/>
+	
+	<fx:Metadata>
+		[ResourceBundle("message")]
+		[ResourceBundle("resource")]
+	</fx:Metadata>
+
+	<fx:Script>
+		<![CDATA[
+			import jp.co.ctc.entity.MUser;
+			import jp.co.ctc.event.MstSelectEvent;
+			import jp.co.ctc.util.MUserUtils;
+			import jp.co.ctc.util.Utils;
+			
+			import mx.collections.ArrayCollection;
+			import mx.controls.Alert;
+			import mx.events.CloseEvent;
+			import mx.events.FlexEvent;
+			import mx.formatters.DateFormatter;
+			import mx.managers.PopUpManager;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			import mx.utils.StringUtil;
+			
+			private var selectMst:int;
+			private var bctype:String;
+			private var userCode:String;
+			private var itemArray:Array;
+			public var loginUserInfo:MUser; //ログインユーザ情報
+
+			/**
+			 * バージョンマスタ
+			 */
+			public function setMstVer(data:int):void {
+				selectMst = data;
+			}
+			/**
+			 * 車種
+			 */
+			public function setBctype(data:String):void {
+				bctype = data;
+			}
+			/**
+			 * 項目コード一覧
+			 */
+			public function setItemArray(data:Array):void {
+				itemArray = data;
+			}
+			/**
+			 * ユーザーコード
+			 */
+			public function setUserCode(data:String):void {
+				userCode = data;
+			}
+
+			/**
+			 * アプリケーション初期化
+			 */
+			protected function application1_creationCompleteHandler(event:FlexEvent):void
+			{
+				// 本番予約日時デフォルト日数
+				var reservationDateDefaultDays:int = resourceManager.getInt('resource','reservationDateDefaultDays');
+				// 本番予約日時デフォルト時
+				var reservationDateDefaultHour:int = resourceManager.getInt('resource','reservationDateDefaultHour');
+				// 本番予約日時デフォルト分
+				var reservationDateDefaultMinute:int = resourceManager.getInt('resource','reservationDateDefaultMinute');
+
+				// 現在日付+本番予約日時デフォルト日数パラメータ
+				dfReserveDate.text = getCurrentDateString(reservationDateDefaultDays);
+				// 本番予約日時デフォルト時パラメータ
+				nsReserveHour.value = reservationDateDefaultHour;
+				// 本番予約日時デフォルト分パラメータ
+				nsReserveMinute.value = reservationDateDefaultMinute;
+				
+				if (this.itemArray != null)
+				{
+					this.btnInspecAll.visible = false;
+					this.btnInspecSort.visible = false;
+					this.btnInspecCancel.visible = false;
+					this.btnOK.visible = true;
+					this.btnCancel.visible = true;
+				}
+				else 
+				{
+					this.btnInspecAll.visible = true;
+					this.btnInspecSort.visible = true;
+					this.btnInspecCancel.visible = true;
+					this.btnOK.visible = false;
+					this.btnCancel.visible = false;
+				}
+				
+				// NumericStepperの入力不可
+				nsReserveHour.textDisplay.editable = false;
+				nsReserveMinute.textDisplay.editable = false;
+
+				// コンポーネントの制御をする
+				this.enabledComponent();
+			}
+			
+			/**
+			 * メッセージを表示する。
+			 *
+			 * メッセージが閉じられたとき、パスワード入力欄をリセットし
+			 * パスワード入力欄にフォーカスを移す。
+			 */
+			private function showMessage(message:String):void {
+				Alert.show(message,"確認",Alert.OK,this,
+					function(event:CloseEvent):void {
+						dummy.setFocus();
+					}
+				);
+			}
+			
+			/**
+			 * OKボタン、全体の場合ボタン、検査順のみの場合押下時の制御を行う。
+			 * 指示記号メンテ画面から呼ばれた場合。
+			 */
+			protected function btn_clickHandler(registType:String):void
+			{
+				if (!checkReserveDate()){
+					return;
+				}
+				
+				// 予約日時
+				var formatter:DateFormatter = new DateFormatter();
+				formatter.formatString = 'YYYY/MM/DD JJ:NN';
+				var dtReserveDate:Date = Utils.inputTextToDateWithTime(dfReserveDate.text, nsReserveHour.value, nsReserveMinute.value);
+				var reserveDate:String = formatter.format(dtReserveDate); 
+				
+				if (registType == "0" || registType == "1"){
+					// [全体の場合][検査順のみの場合]ボタン押下時の処理
+					srvRegist.registReserveDateFromTempMst(selectMst, bctype, userCode, reserveDate, registType);	
+				}
+				else if (registType == "2"){
+					// [OK]ボタン押下時の処理
+					srvRegist.registReserveDateFromSign(selectMst, bctype, itemArray, userCode, reserveDate);
+				}
+			}
+
+			/**
+			 * 日時チェック
+			 */
+			protected function checkReserveDate():Boolean
+			{
+				// 本番予約日時指定可能日数
+				var reservationDatePossibleDays:int = resourceManager.getInt('resource','reservationDatePossibleDays');
+				//検索条件の初期値として格納(何も入力されていなければ全件表示)
+				var stDate:Date = new Date();
+				var compareDate:Date = new Date();
+			
+				// 日時でないチェック
+				if(dfReserveDate.text != ""){
+					//不備があればNullが返ってくる
+					stDate = Utils.inputTextToDateWithTime(dfReserveDate.text, nsReserveHour.value, nsReserveMinute.value);
+					if(stDate == null){
+						this.showMessage(resourceManager.getString('message','msg00006'));
+						return false;
+					}
+				}
+				
+				// 日時が未来日で無いチェック
+				if(dfReserveDate.text != ""){
+					//falseが返ってくれば中断
+					if(!Utils.dateBeforeAfterCheck(compareDate, stDate)){
+						this.showMessage(resourceManager.getString('message','msg00007'));
+						return false;
+					}
+				}
+				
+				// 日時が現在日時+本番予約日時指定可能日数パラメータ以降のチェック
+				if(dfReserveDate.text != ""){
+					//falseが返ってくれば中断
+					compareDate.setDate(compareDate.getDate() + reservationDatePossibleDays);
+					if(Utils.dateBeforeAfterCheck2(compareDate, stDate)){
+						// 【[現在日時+本番予約日時指定可能日数パラメータ]以降は設定できません。】で、エラーダイアログを表示する。
+						var compareDF:DateFormatter = new DateFormatter();
+						compareDF.formatString = "YYYY/MM/DD JJ:NN"
+						var currentDateString:String = compareDF.format(compareDate);
+						this.showMessage(StringUtil.substitute(resourceManager.getString('message','msg00008'), currentDateString));
+						return false;
+					}
+				}
+				return true;
+			}
+			
+			/**
+			 * OKボタン押下時の制御を行う。
+			 * 指示記号メンテ画面から呼ばれた場合。
+			 */
+			protected function okPush_resultHandler(event:ResultEvent):void 
+			{
+				// サーバー処理の呼出が出来ませんでした
+				if (event.result==null) {
+					this.showMessage(resourceManager.getString('message','msg00033'));
+				}
+				else
+				{
+					var strResult:String = event.result as String;
+					if (strResult == null) {
+						var arrResult:ArrayCollection = event.result as ArrayCollection;	
+						this.showMessage(StringUtil.substitute(resourceManager.getString('message','msg00005'), arrResult));
+					}
+					else {
+						if (strResult == "1") {
+							// 戻り値が1
+							this.showMessage(resourceManager.getString('message','msg00041'));
+						}
+						else if (strResult == "4") {
+							// マスタが存在しない
+							Alert.show(resourceManager.getString('message','msg00054'));
+						}
+						else {
+							closeWindow(1);
+						}	
+					}
+				}
+			}
+			
+			/**
+			 * [全体の場合][検査順のみの場合]ボタン押下時の処理
+			 * 仮マスタ本番登録画面から呼ばれた場合。
+			 */
+			protected function allPush_resultHandler(event:ResultEvent):void 
+			{
+				// サーバー処理の呼出が出来ませんでした
+				if (event.result==null) {
+					this.showMessage(resourceManager.getString('message','msg00033'));
+				}
+				else
+				{
+					var strResult:String = event.result as String;
+					if (strResult == null) {
+						var arrResult:ArrayCollection = event.result as ArrayCollection;	
+						this.showMessage(StringUtil.substitute(resourceManager.getString('message','msg00005'), event.result));
+					}
+					else {
+						if (strResult == "1") {
+							// 戻り値が1
+							this.showMessage(resourceManager.getString('message','msg00041'));
+						}
+						else if (strResult == "4") {
+							// マスタが存在しない
+							Alert.show(resourceManager.getString('message','msg00054'));
+						}
+						else {
+							closeWindow(1);
+						}	
+					}
+				}
+			}
+			
+			/**
+			 * サーバー処理異常終了
+			 */
+			private function onPush_resultHandlerFault(e:FaultEvent):void
+			{
+				this.showMessage(resourceManager.getString('message','msg00034'));				
+			}
+
+			private function getCurrentDateString(changeDay:int):String
+			{               
+				var currentDate:Date = new Date();
+				currentDate.setDate(currentDate.getDate() + changeDay);
+				var currentDF:DateFormatter = new DateFormatter();
+				currentDF.formatString = "YYYY/MM/DD"
+				var currentDateString:String = currentDF.format(currentDate);
+				return currentDateString;
+			}
+
+			/**
+			 * キャンセルボタンの押下イベント
+			 * クローズイベントを発生させる。
+			 */
+			protected function closeWindow(detail:int):void {
+				var closeEvent:CloseEvent = new CloseEvent(mx.events.CloseEvent.CLOSE, false, false, detail);
+				dispatchEvent(closeEvent);
+			}
+
+			protected function titlewindow1_closeHandler(event:CloseEvent):void
+			{
+				PopUpManager.removePopUp(this);
+			}
+
+			/**
+			 * コンポーネントの制御をする
+			 */
+			private function enabledComponent():void
+			{
+				if(parentApplication.hasOwnProperty("loginUserInfo")) {
+					// 検査員 OR 検査職制本番不可の場合
+					if(MUserUtils.isExaminer(parentApplication.loginUserInfo) || MUserUtils.OfficeOrganizationNot(parentApplication.loginUserInfo)) {
+						this.btnInspecAll.enabled = false;
+						this.btnInspecSort.enabled = false;
+					}
+					else if(MUserUtils.OfficeOrganization(parentApplication.loginUserInfo)) {
+						// 検査職制本番可の場合
+						this.btnInspecAll.enabled = false;
+						this.btnInspecSort.enabled = true;
+
+						// 仮0マスタ以外は不可
+						if(parentApplication.hasOwnProperty("selectMst") && MstSelectEvent.isTemporary0(parentApplication.selectMst) == false) {
+							this.btnInspecSort.enabled = false;
+						}
+					}
+				}
+			}
+			
+		]]>
+	</fx:Script>
+
+	<fx:Declarations>
+		<s:RemoteObject id="srvRegist" destination="mstRegistService">
+			<s:method name="registReserveDateFromSign" result="okPush_resultHandler(event)" fault="onPush_resultHandlerFault(event)"/>
+			<s:method name="registReserveDateFromTempMst" result="allPush_resultHandler(event)" fault="onPush_resultHandlerFault(event)"/>
+		</s:RemoteObject>
+	</fx:Declarations>
+</s:TitleWindow>

@@ -1,0 +1,426 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/Layout"
+    android:layout_width="fill_parent"
+    android:layout_height="fill_parent"
+    android:orientation="horizontal" >
+
+    <!-- 左領域 -->
+    <LinearLayout
+        android:id="@+id/LinearLayout001"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="2"
+        android:orientation="vertical"
+        android:padding="0dp" >
+
+        <!-- 情報 -->
+        <LinearLayout
+            android:id="@+id/LinearLayout001_1"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:padding="0dp" >
+
+            <!-- 車両情報 -->
+            <LinearLayout
+                android:id="@+id/LinearLayout001_11"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="4"
+                android:orientation="vertical"
+                android:padding="0dp" >
+
+                <!-- 撮影日時 -->
+                <LinearLayout
+                    android:id="@+id/LinearLayout001_111"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:padding="0dp" >
+
+                    <TextView
+                        android:id="@+id/TextView001_11"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="left"
+                        android:text="@string/shotimageFileDateLabel"
+                        android:textSize="30sp"
+                        android:typeface="monospace" />
+
+                    <TextView
+                        android:id="@+id/shotimageFileDate"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="left"
+                        android:text="撮影日時"
+                        android:textSize="40sp"
+                        android:typeface="monospace" />
+
+                </LinearLayout>
+
+                <!-- 車種名、ボデーNO -->
+                <LinearLayout
+                    android:id="@+id/LinearLayout001_112"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:padding="0dp" >
+
+                    <TextView
+                        android:id="@+id/TextView001_21"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="left"
+                        android:text="@string/vehicleNameLabel"
+                        android:textSize="30sp"
+                        android:typeface="monospace" />
+
+                    <TextView
+                        android:id="@+id/vehicleName"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="left"
+                        android:text="車種"
+                        android:textSize="40sp"
+                        android:typeface="monospace" />
+
+                    <TextView
+                        android:id="@+id/TextView001_22"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="left"
+                        android:text="　"
+                        android:textSize="30sp"
+                        android:typeface="monospace" />
+
+                    <TextView
+                        android:id="@+id/TextView001_23"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="left"
+                        android:text="@string/bodyNoLabel"
+                        android:textSize="30sp"
+                        android:typeface="monospace" />
+
+                    <TextView
+                        android:id="@+id/bodyNo"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="left"
+                        android:text="ボデーNO"
+                        android:textSize="40sp"
+                        android:typeface="monospace" />
+
+                    </LinearLayout>
+
+                <!-- 項目 -->
+                <LinearLayout
+                    android:id="@+id/LinearLayout001_113"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:padding="0dp" >
+
+                    <TextView
+                        android:id="@+id/TextView001_31"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="left"
+                        android:text="@string/itemNameLabel"
+                        android:textSize="30sp"
+                        android:typeface="monospace" />
+
+                    <TextView
+                        android:id="@+id/itemName"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="left"
+                        android:text="項目"
+                        android:textSize="40sp"
+                        android:typeface="monospace" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <!-- タクトタイム -->
+            <LinearLayout
+                android:id="@+id/LinearLayout001_12"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="horizontal"
+                android:padding="0dp" >
+
+                <LinearLayout
+                    android:id="@+id/LinearLayout001_121"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical"
+                    android:padding="0dp" >
+
+                    <TextView
+                        android:id="@+id/tacttimeLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="right"
+                        android:text="@string/tacttimeLabel"
+                        android:textSize="30sp"
+                        android:typeface="monospace" />
+
+                    <TextView
+                        android:id="@+id/tacttime"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="right"
+                        android:text="タクトタイム"
+                        android:textSize="80sp"
+                        android:typeface="monospace" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- 画像 -->
+        <LinearLayout
+            android:id="@+id/LinearLayout001_2"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="horizontal"
+            android:padding="0dp" >
+
+            <ImageView
+                android:id="@+id/shotimage"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:adjustViewBounds="true"
+                android:background="@drawable/btn_default_normal" />
+
+            <TextView
+                android:id="@+id/shotimageMsg"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:text="メッセージ"
+                android:textSize="25sp"
+                android:typeface="monospace" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- 右領域 -->
+    <LinearLayout
+        android:id="@+id/LinearLayout002"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:padding="0dp" >
+
+        <!-- 上部 -->
+        <LinearLayout
+            android:id="@+id/LinearLayout01"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content" >
+
+            <TextView
+                android:id="@+id/KS_TV_GROUPNAME"
+                android:layout_width="wrap_content"
+                android:layout_height="fill_parent"
+                android:padding="1mm"
+                android:text="グループ"
+                android:textSize="12sp" >
+            </TextView>
+
+            <TextView
+                android:id="@+id/KS_TV_KENSAJUN"
+                android:layout_width="wrap_content"
+                android:layout_height="fill_parent"
+                android:padding="1mm"
+                android:text="No.99 "
+                android:textSize="12sp" >
+            </TextView>
+        </LinearLayout>
+
+        <!-- 検査項目名称 -->
+        <LinearLayout
+            android:id="@+id/LinearLayout02"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content" >
+
+            <TextView
+                android:id="@+id/KS_TV_KENSAITEM"
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:text="スピーカー"
+                android:textSize="28sp"
+                android:textStyle="bold"
+                android:paddingLeft="1mm"
+                android:typeface="monospace" >
+            </TextView>
+        </LinearLayout>
+
+        <!-- 検査内容 -->
+        <LinearLayout
+            android:id="@+id/LinearLayout03"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content" >
+
+            <TextView
+                android:id="@+id/KS_TV_KENSANAIYO"
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:text="国国国国国"
+                android:textColor="@color/WHITE"
+                android:textSize="20sp"
+                android:paddingLeft="1mm"
+                android:typeface="monospace" >
+            </TextView>
+        </LinearLayout>
+
+        <!-- 画像 -->
+        <FrameLayout
+            android:id="@+id/FrameLayout01"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:layout_weight="1" >
+
+            <ImageView
+                android:id="@+id/ImageView01"
+                android:layout_width="fill_parent"
+                android:layout_height="fill_parent"
+                android:maxHeight="300dp"
+                android:minHeight="300dp"
+                android:scaleType="fitCenter" >
+            </ImageView>
+
+            <TextView
+                android:id="@+id/tvImageKensaNaiyo"
+                android:layout_width="wrap_content"
+                android:layout_height="fill_parent"
+                android:layout_gravity="center"
+                android:gravity="center"
+                android:typeface="monospace" />
+        </FrameLayout>
+
+        <!-- 固定 -->
+        <LinearLayout
+            android:id="@+id/LinearLayout08"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:gravity="right" >
+
+            <TextView
+                android:id="@+id/TextView02"
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/confirm"
+                android:textColor="@color/WHITE"
+                android:typeface="monospace"
+                android:paddingLeft="1mm"
+                android:textSize="20sp" >
+            </TextView>
+        </LinearLayout>
+
+        <!-- 選択 -->
+        <LinearLayout
+            android:id="@+id/LinearLayout06"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" >
+
+            <Button
+                android:id="@+id/Gohin"
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:text="@string/Gohin" />
+
+            <Button
+                android:id="@+id/Keppin"
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                 android:layout_weight="1"
+                 android:textSize="22sp"
+                android:textStyle="bold"
+                android:text="@string/Keppin" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/LinearLayout07"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" >
+
+            <Button
+                android:id="@+id/Fuyou"
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:text="@string/Fuyou" />
+
+            <Button
+                android:id="@+id/Sonota"
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:text="@string/Sonota" />
+
+        </LinearLayout>
+
+        <!-- 固定 -->
+        <TextView
+            android:id="@+id/TextView01"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="bottom"
+            android:textSize="14sp" >
+        </TextView>
+
+        <!-- 戻る -->
+        <LinearLayout
+            android:id="@+id/LinearLayout08"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:gravity="bottom" >
+
+            <Button
+                android:id="@+id/back"
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/sBack"
+                android:textSize="22sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- 下部 -->
+        <LinearLayout
+            android:id="@+id/LinearLayout09"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:gravity="bottom" >
+
+            <TextView
+                android:id="@+id/KS_TV_BODYNO"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="bottom"
+                android:text="12345"
+                android:textSize="14sp" >
+            </TextView>
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</LinearLayout>

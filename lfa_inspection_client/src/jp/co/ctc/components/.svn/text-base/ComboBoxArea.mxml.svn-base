@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!---
+AdvancedDataGridにて汎用的に利用できるコンボボックスです。
+・エリア格納します。
+
+使用場所は「group_mainte.mxml」です。
+
+-->
+<s:MXAdvancedDataGridItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+								  xmlns:s="library://ns.adobe.com/flex/spark" 
+								  xmlns:mx="library://ns.adobe.com/flex/mx"
+								  focusEnabled="true"
+								  dataChange="mxadvanceddatagriditemrenderer1_dataChangeHandler(event)">
+	<fx:Script>
+		<![CDATA[
+			import jp.co.ctc.entity.MGroup;
+			import jp.co.ctc.event.MstSelectEvent;
+			import jp.co.ctc.util.MUserUtils;
+
+			import mx.collections.ArrayCollection;
+			import mx.collections.IList;
+			import mx.controls.advancedDataGridClasses.AdvancedDataGridListData;
+			import mx.events.FlexEvent;
+
+			import spark.events.IndexChangeEvent;
+
+			/** ドロップダウンリストに表示するデータ */
+//			[Bindable]
+//			private var acArea:ArrayCollection = new ArrayCollection(
+//				[ {area:"艤装"}, {area:"セールス"} ]);
+
+			
+			/**
+			 * グリッドにデータがセットされたときの処理
+			 */
+			protected function mxadvanceddatagriditemrenderer1_dataChangeHandler(event:FlexEvent):void
+			{
+				if(listData == null){
+					return;
+				}
+				
+				var ld:AdvancedDataGridListData = AdvancedDataGridListData(listData);
+				var field:String = ld.dataField;
+				
+				try{
+					
+				
+					// dataProviderがセットされていなければセットする
+					if (cmbboxArea.dataProvider == null){
+						if (parentApplication.DdlList == null) {
+							return;
+						}
+						cmbboxArea.dataProvider = parentApplication.DdlList;
+					}
+					
+					// 初期値をセット
+					cmbboxArea.selectedIndex = 0;
+					
+					
+					var groupList:IList = cmbboxArea.dataProvider;
+					var loop_cnt:int;
+					// 登録された値に対応するIndexを選択
+					if (ld != null && ld.item[field] != null && ld.item[field].length > 0){
+						for (loop_cnt=0;loop_cnt<groupList.length;loop_cnt++ ){
+							var area:String = (groupList[loop_cnt] as MGroup).area;
+							if ( area == ld.item[field]){
+								cmbboxArea.selectedIndex = loop_cnt;
+								break;
+							}
+						}
+					}
+
+					// 2016/02/24 DA ins start
+					// selectMstが存在する画面で、本番マスタ選択時は編集不可
+					if(parentApplication.hasOwnProperty("selectMst") && MstSelectEvent.isReal(parentApplication.selectMst)) {						
+						cmbboxArea.enabled = false;
+						return;
+					}
+
+					//ユーザー権限チェック
+					if(parentApplication.hasOwnProperty("loginUserInfo") && MUserUtils.isAdministrator(parentApplication.loginUserInfo) == false) {						
+						cmbboxArea.enabled = false;
+						return;
+					}
+					
+					// 車種の予約フラグが予約の時
+					if (parentApplication.hasOwnProperty("isReservedMVehicle") && parentApplication.isReservedMVehicle == true) {
+						cmbboxArea.enabled = false;
+						return;
+					}
+
+					cmbboxArea.enabled = true;
+					// 2016/02/24 DA ins end
+
+				} catch (e:Error){
+					return;							
+				}
+			
+			
+			}
+			
+			/**
+			 * コンボボックス上でデータが変更されたときの処理
+			 */
+			protected function cmbboxArea_changeHandler(event:IndexChangeEvent):void
+			{
+
+				// コンボボックスに直接手入力された場合など、
+				// 該当する工程が存在しないことがある。
+				// その場合、編集前の状態に戻す
+				if (event.newIndex < -1) {
+					cmbboxArea.selectedIndex = event.oldIndex;
+					return;
+				}
+				
+				if(listData == null){
+					return;
+				}
+				
+				var acArea:IList = cmbboxArea.dataProvider;
+
+				var ld:AdvancedDataGridListData = AdvancedDataGridListData(listData);
+				var field:String = ld.dataField;
+				
+				// MGroupレコードが存在するかチェック
+				if (ld.item["area"] != null && ld.item[field].length > 0){
+					
+					// MGroupが存在する場合、上書き
+					ld.item["area"] = cmbboxArea.selectedItem.area;
+					
+					// 新規追加行でなければ、編集区分を「更新」にする
+					if (ld.item["editDiv"] != "I"){
+						ld.item["editDiv"] = "U";
+					}
+					
+					// グループ設定が新規追加でなければ
+					if (ld.item["editDiv"] != "I") {
+						// 編集区分を「更新」に、更新者を格納
+						ld.item["editDiv"] = "U";
+						ld.item["updateUser"] = parentApplication.loginUser;
+						
+						// 変更したコンボボックスにより格納する値を分岐
+						ld.item["area"] = acArea[event.newIndex].area;
+					}
+					
+					// MGroupが存在しない場合
+				} else {
+					
+					// MGroupが存在しない場合、MGroup作成
+					var mGroup:MGroup = new MGroup();
+					
+					// 編集区分・作成者を格納
+					mGroup.editDiv = "I";
+					mGroup.insertUser = parentApplication.loginUser;
+					
+					// コンボボックスを選択した項目により格納する値を分岐
+					mGroup.area = acArea[event.newIndex].area;
+					
+					// 新規追加行でなければ、行の編集区分に「更新」を格納
+					if (ld.item["editDiv"] != "I") {
+						ld.item["editDiv"] = "U";
+					}
+					
+					// MOder(LgMOrder)がnullなら空の配列を格納
+					ld.item["area"] = acArea[event.newIndex].area;
+					
+				}
+				
+				// dummyの使用目的
+				// 上記のif-elseの処理を行ってもGridの更新イベントが実行されないケースがある。
+				// 強制的にGridを更新する為にDummyの値を変更する。
+				data.dummy = data.dummy +1;
+			}
+		]]>
+	</fx:Script>
+	<s:DropDownList id="cmbboxArea" width="100%" labelField="area"
+					 horizontalCenter="0"
+					change="cmbboxArea_changeHandler(event)" />
+</s:MXAdvancedDataGridItemRenderer>

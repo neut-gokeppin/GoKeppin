@@ -1,0 +1,289 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:mx="library://ns.adobe.com/flex/mx"
+			   pageTitle="誤欠品検出力向上ツール - 検査結果履歴画像"
+			   xmlns:components="jp.co.ctc.components.*"
+			   creationComplete="application1_creationCompleteHandler(event)"
+			   backgroundColor="0x000000">
+	<s:layout>
+		<s:VerticalLayout paddingLeft="8" paddingRight="8" paddingTop="8" paddingBottom="8" horizontalAlign="center" gap="8"/>
+	</s:layout>
+
+	<fx:Style source="lfa_inspection.css"/>
+
+	<fx:Metadata>
+		[ResourceBundle("message")]
+		[ResourceBundle("resource")]
+	</fx:Metadata>
+
+	<fx:Script>
+		<![CDATA[
+			import mx.controls.Alert;
+			import mx.events.FlexEvent;
+			import mx.graphics.SolidColor;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+
+			private var TITLE:String = "検査結果履歴画像";
+		
+			/**
+			 * アプリケーション初期化
+			 */
+			protected function application1_creationCompleteHandler(event:FlexEvent):void
+			{
+				TITLE = resourceManager.getString('resource','cli1800001');
+
+				// Debug用 ****************************************
+				//srvFResult.setSelectFResult("0000000201", "20180125", 1105, 1, 1);
+				// Debug用 ****************************************
+
+				//画像情報を取得
+				srvFResult.getFResultImage();
+
+				// Alertのボタンの幅を変更
+				// デフォルトの60だと"キャンセル"の文字が表示しきれない。
+				Alert.buttonWidth = 100;
+			}
+
+			/**
+			 * 検査結果履歴画像画面に表示する情報の取得後の処理。
+			 */
+			protected function getFResultImage_resultHandler(event:ResultEvent):void {
+				
+				if (event.result == null) {
+					//検査結果の画像が取得できませんでした。再度、画像を選択し直してください。
+					Alert.show(resourceManager.getString('message','msg00058'), TITLE);
+					return;
+				}
+				
+				var fresultData:Object = event.result[0];
+				var inspecOrder:int = event.result[1] as int;
+				var itemCount:int = event.result[2] as int;
+				var shotImageContents:String = event.result[3] as String;
+				var okBcSignContents:String = event.result[4] as String;
+				var ngBcSignContents:String = event.result[5] as String;
+				var shotImageFlg:int = event.result[6] as int;
+				var okBcSignFlg:int = event.result[7] as int;
+				var ngBcSignFlg:int = event.result[8] as int;
+
+				var unnecessaryColor:uint = 0x868686;
+				var noneColor:uint = 0x000000;
+				var normalColor:uint = 0xC0C0C0;
+				var okColor:uint = 0x00FF00;
+				var ngColor:uint = 0xFF0000;
+
+				bc11.backgroundFill = new SolidColor( normalColor, 1.0 );
+				bc21.backgroundFill = new SolidColor( normalColor, 1.0 );
+				bc22.backgroundFill = new SolidColor( normalColor, 1.0 );
+				
+				if (shotImageFlg == 1) {
+					img11.source = "../" + shotImageContents;
+					img11.visible = true;
+					lbl11.visible = false;					
+				} else if (shotImageFlg == 2) {
+					img11.visible = false;
+					lbl11.text = resourceManager.getString('resource','cli1800016') + fresultData.shotImage;					
+					lbl11.visible = true;					
+				} else {
+					img11.visible = false;
+					lbl11.text = shotImageContents;					
+					lbl11.visible = true;					
+				}
+				if (okBcSignFlg == 1) {
+					img21.source = "../" + okBcSignContents;
+					img21.visible = true;
+					lbl21.visible = false;					
+				} else if (okBcSignFlg == 2) {
+					img21.visible = false;
+					lbl21.text = resourceManager.getString('resource','cli1800016') + fresultData.mBcsignOk.fileName;					
+					lbl21.visible = true;					
+				} else {
+					img21.visible = false;
+					lbl21.text = okBcSignContents;					
+					lbl21.visible = true;					
+				}
+				if (ngBcSignFlg == 1) {
+					img22.source = "../" + ngBcSignContents;
+					img22.visible = true;
+					lbl22.visible = false;					
+				} else if (ngBcSignFlg == 2) {
+					img22.visible = false;
+					lbl22.text = resourceManager.getString('resource','cli1800016') + fresultData.mBcsignNg.fileName;					
+					lbl22.visible = true;			
+				} else if (ngBcSignFlg == 3) {
+					img22.visible = false;
+					lbl22.visible = false;			
+					var isTire:Boolean = fresultData.mItem.tireDiv;
+					if (isTire) {
+						// タイヤメーカの場合は、色なしに変える
+						bc22.backgroundFill = new SolidColor( noneColor, 1.0 );
+					}
+					else {
+						bc22.backgroundFill = new SolidColor( unnecessaryColor, 1.0 );
+					}
+				} else {
+					img22.visible = false;
+					lbl22.text = ngBcSignContents;					
+					lbl22.visible = true;					
+				}
+				
+				lbl2.text = fresultData.mOrder.mGroup.groupName;
+				lbl4.text = inspecOrder + " / " + itemCount;
+				lbl6.text = fresultData.bodyNo;
+				lbl8.text = fresultData.mItem.itemName;
+				
+				var flg:int = 0;
+				if ("0" == fresultData.inspecResult) {
+					flg = 0; // 正解
+				} else if ("1" == fresultData.inspecResult) {
+					flg = 1; // 不正解
+				} else if ("2" == fresultData.inspecResult) {
+					flg = 1; // 不正解
+				} else if ("3" == fresultData.inspecResult) {
+					flg = 0; // 正解
+				} else if ("4" == fresultData.inspecResult) {
+					flg = 2; // 誤選択
+				}
+
+				// 背景色の設定
+				if (flg == 0) {
+					bc21.backgroundFill = new SolidColor( okColor, 1.0 );
+				} else {
+					if ("Others" == fresultData.inputData) {
+						bc23.backgroundFill = new SolidColor( ngColor, 1.0 );
+					} else {
+						var isTire:Boolean = fresultData.mItem.tireDiv;
+						if (isTire) {
+							// タイヤメーカの場合は、正解側を変える
+							bc21.backgroundFill = new SolidColor( ngColor, 1.0 );
+						}
+						else {
+							bc22.backgroundFill = new SolidColor( ngColor, 1.0 );
+						}
+					}
+				}
+				
+				// 文言の設定
+				if (flg == 0) {
+					lbl24.text = resourceManager.getString('resource','cli1800008');
+				} else {
+					// NG理由
+					var ngReasonName:String = "";
+					if (flg == 1) {
+						if ("0" == fresultData.ngReason) {
+							ngReasonName = resourceManager.getString('resource','cli1800010'); //誤品
+						} else if ("1" == fresultData.ngReason) {
+							ngReasonName = resourceManager.getString('resource','cli1800011'); //欠品
+						} else if ("2" == fresultData.ngReason) {
+							ngReasonName = resourceManager.getString('resource','cli1800012'); //不要
+						} else if ("3" == fresultData.ngReason) {
+							ngReasonName = resourceManager.getString('resource','cli1800013'); //その他
+						} else if ("5" == fresultData.ngReason) {
+							ngReasonName = resourceManager.getString('resource','cli1800014'); //特設OK
+						}
+					} else {
+						ngReasonName = resourceManager.getString('resource','cli1800015'); //誤選択
+					}
+					
+					lbl24.text = resourceManager.getString('resource','cli1800009') + "(" + ngReasonName + ")";
+				}
+			}
+
+			/**
+			 * 通信エラーの場合(Data取得Error Event)
+			 */
+			private function getFResultImage_faultHandler(e:FaultEvent):void
+			{
+				//検査結果の画像が取得できませんでした。再度、画像を選択し直してください。
+				Alert.show(resourceManager.getString('message','msg00058'), TITLE);
+			}
+			
+			/**
+			 * 終了ボタン押下時の処理。
+			 */
+			protected function btnExit_clickHandler(event:MouseEvent):void
+			{
+				//IEだと終了する
+				if (ExternalInterface.available)
+				{
+					ExternalInterface.call("open('about:blank', '_self').close()");
+				}
+			}
+		]]>
+	</fx:Script>
+
+	<fx:Declarations>
+		<!-- 非ビジュアルエレメント (サービス、値オブジェクトなど) をここに配置 -->
+		<s:RemoteObject id="srvFResult" destination="FResultService" >
+			<s:method name="getFResultImage" result="getFResultImage_resultHandler(event)" fault="getFResultImage_faultHandler(event)"/>
+		</s:RemoteObject>
+	</fx:Declarations>
+
+	<s:HGroup width="100%" height="24" verticalAlign="middle" fontFamily="ＭＳ ゴシック" color="0xFFFFFF">
+
+		<s:HGroup width="50%" horizontalAlign="left">
+			<s:Label text="{resourceManager.getString('resource','cli1800002')}" fontSize="14" fontWeight="bold"/>
+		</s:HGroup>
+<!--
+		<s:HGroup width="50%" horizontalAlign="right">
+			<s:Button label="終了" height="30" id="btnExit" click="btnExit_clickHandler(event)"/>
+		</s:HGroup>
+-->
+	</s:HGroup>
+
+	<s:HGroup width="100%" height="100%" gap="0" verticalAlign="middle" horizontalAlign="center" color="0xFFFFFF">
+
+		<s:VGroup width="66%" height="100%" gap="0" verticalAlign="middle">
+
+			<s:TileGroup width="100%" height="17%" requestedColumnCount="2" requestedRowCount="4">
+				<s:Label id="lbl1" text="{resourceManager.getString('resource','cli1800003')}"/>
+				<s:Label id="lbl2" text=""/>
+				<s:Label id="lbl3" text="{resourceManager.getString('resource','cli1800004')}"/>
+				<s:Label id="lbl4" text=""/>
+				<s:Label id="lbl5" text="{resourceManager.getString('resource','cli1800005')}"/>
+				<s:Label id="lbl6" text=""/>
+				<s:Label id="lbl7" text="{resourceManager.getString('resource','cli1800006')}"/>
+				<s:Label id="lbl8" text=""/>
+			</s:TileGroup>
+			
+			<s:BorderContainer id="bc11" width="100%" height="83%" borderVisible="false" backgroundColor="0x000000">
+				<s:Image id="img11" width="97%" height="97%" verticalCenter="0" horizontalCenter="0"/>
+				<s:TextArea id="lbl11" editable="false" width="97%" height="97%" borderVisible="false" verticalCenter="0" horizontalCenter="0" contentBackgroundAlpha="100" contentBackgroundColor="0x000000"/>
+			</s:BorderContainer>
+		</s:VGroup>
+
+		<s:VGroup width="1%">
+		</s:VGroup>
+		
+		<s:VGroup width="33%" height="100%" gap="0" verticalAlign="middle" horizontalAlign="center">
+			
+			<s:BorderContainer id="bc21" width="100%" height="42.7%" borderVisible="false" backgroundColor="0x000000">
+				<s:Image id="img21" width="95%" height="95%" verticalCenter="0" horizontalCenter="0"/>
+				<s:TextArea id="lbl21" editable="false" width="95%" height="95%" borderVisible="false" verticalCenter="0" horizontalCenter="0" contentBackgroundAlpha="100" contentBackgroundColor="0x000000"/>
+			</s:BorderContainer>
+
+			<s:Label id="lbl31" text="" height="0.4%"/>
+			
+			<s:BorderContainer id="bc22" width="100%" height="42.7%" borderVisible="false" backgroundColor="0x000000">
+				<s:Image id="img22" width="95%" height="95%" verticalCenter="0" horizontalCenter="0"/>
+				<s:TextArea id="lbl22" editable="false" width="95%" height="95%" borderVisible="false" verticalCenter="0" horizontalCenter="0" contentBackgroundAlpha="100" contentBackgroundColor="0x000000"/>
+			</s:BorderContainer>
+
+			<s:Label id="lbl32" text="" height="0.4%"/>
+			
+			<s:BorderContainer id="bc23" width="100%" height="8.5%" borderVisible="false" backgroundColor="0x000000">
+				<s:Image id="img23" width="95%" height="93%" horizontalCenter="0" verticalCenter="0" source="assets/hoka.jpg" scaleMode="zoom"/>
+				<s:Label id="lbl23" text="{resourceManager.getString('resource','cli1800007')}" fontSize="14" verticalCenter="0" horizontalCenter="0" color="0x000000"/>
+			</s:BorderContainer>
+
+			<s:Label id="lbl33" text="" height="0.4%"/>
+			
+			<s:BorderContainer id="bc24" width="100%" height="4.7%" borderVisible="false" backgroundColor="0x000000">
+				<s:Label id="lbl24" text="" fontSize="18" verticalCenter="0" horizontalCenter="0"/>
+			</s:BorderContainer>
+
+		</s:VGroup>
+	</s:HGroup>
+	
+</s:Application>

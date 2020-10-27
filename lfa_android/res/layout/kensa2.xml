@@ -1,0 +1,224 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/Layout2"
+    android:layout_width="fill_parent"
+    android:layout_height="fill_parent"
+    android:orientation="vertical" >
+
+    <LinearLayout
+        android:id="@+id/LinearLayout01"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="0dp" >
+
+        <LinearLayout
+            android:id="@+id/LinearLayout06"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:padding="0dp" >
+
+            <TextView
+                android:id="@+id/KS_TV_GROUPNAME"
+                android:layout_width="wrap_content"
+                android:layout_height="fill_parent"
+                android:lines="2"
+                android:maxWidth="90dp"
+                android:padding="0dp"
+                android:text="&lt;&lt;グループ>>"
+                android:textSize="12sp" >
+
+            </TextView>
+
+            <TextView
+                android:id="@+id/KS_TV_KENSAJUN"
+                android:layout_width="wrap_content"
+                android:layout_height="fill_parent"
+                android:layout_marginLeft="4dp"
+                android:padding="0dp"
+                android:text="No.999"
+                android:textSize="12sp" >
+
+            </TextView>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/LinearLayout04"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="right"
+            android:layout_weight="0"
+            android:gravity="right"
+            android:padding="0dp" >
+
+            <Button
+                android:id="@+id/Menu_Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:padding="0dp"
+                android:soundEffectsEnabled="true"
+                android:text="@string/Menu_Button"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:width="60sp" >
+            </Button>
+
+            <Button
+                android:id="@+id/Mae_Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="16dp"
+                android:layout_marginRight="16dp"
+                android:padding="0dp"
+                android:soundEffectsEnabled="true"
+                android:text="@string/Mae_Button"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:width="60sp" >
+
+            </Button>
+
+            <Button
+                android:id="@+id/Tsugi_Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:padding="0dp"
+                android:text="@string/Tsugi_Button"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:width="60sp" >
+            </Button>
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/LinearLayout07"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content" >
+
+        <TextView
+            android:id="@+id/KS_TV_KENSAITEM"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:text="検査項目名称"
+            android:textSize="16sp"
+            android:typeface="monospace" >
+        </TextView>
+    </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/FrameLayout01"
+        android:layout_width="fill_parent"
+        android:layout_height="175dp"
+        android:layout_weight="4" >
+
+        <ImageButton
+            android:id="@+id/ImageButton01"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:maxHeight="300dp"
+            android:minHeight="300dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/sample_1" >
+        </ImageButton>
+
+        <TextView
+            android:id="@+id/tvImageKensaNaiyo1"
+            android:layout_width="wrap_content"
+            android:layout_height="fill_parent"
+            android:layout_gravity="center"
+            android:layout_marginLeft="8dp"
+            android:layout_marginRight="8dp"
+            android:gravity="center"
+            android:typeface="monospace" />
+
+        <TextView
+            android:id="@+id/TextView01"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@color/back"
+            android:paddingRight="2dp"
+            android:text="@+id/TextView01"
+            android:textColor="@color/BLACK"
+            android:textSize="20sp"
+            android:textStyle="bold" >
+
+        </TextView>
+    </FrameLayout>
+
+    <FrameLayout
+        android:id="@+id/FrameLayout02"
+        android:layout_width="fill_parent"
+        android:layout_height="175dp"
+        android:layout_weight="4" >
+
+        <ImageButton
+            android:id="@+id/ImageButton02"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:maxHeight="300dp"
+            android:minHeight="300dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/sample_1" >
+        </ImageButton>
+
+        <TextView
+            android:id="@+id/tvImageKensaNaiyo2"
+            android:layout_width="wrap_content"
+            android:layout_height="fill_parent"
+            android:layout_gravity="center"
+            android:layout_marginLeft="8dp"
+            android:layout_marginRight="8dp"
+            android:gravity="center"
+            android:typeface="monospace" />
+
+        <TextView
+            android:id="@+id/TextView02"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@color/back"
+            android:paddingRight="2dp"
+            android:text="@+id/TextView02"
+            android:textColor="@color/BLACK"
+            android:textSize="20sp"
+            android:textStyle="bold" >
+
+        </TextView>
+    </FrameLayout>
+
+    <LinearLayout
+        android:id="@+id/LinearLayout08"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:gravity="top" >
+
+        <Button
+            android:id="@+id/OtherButton"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/other"
+            android:textSize="20sp"
+            android:textStyle="bold" >
+        </Button>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/LinearLayout11"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="bottom"
+        android:orientation="horizontal" >
+
+        <TextView
+            android:id="@+id/KS_TV_BODYNO"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="left"
+            android:gravity="bottom"
+            android:text="12345"
+            android:textSize="18sp" />
+
+    </LinearLayout>
+</LinearLayout>

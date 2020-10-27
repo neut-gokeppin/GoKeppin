@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!---
+AdvancedDataGridにて汎用的に利用できるコンボボックスです。
+・ＳＰＳ名を格納します。
+・左ハンドル・右ハンドルに対応
+・本番マスタ選択時には編集不可
+
+
+使用場所は「lg_part_mainte.mxml」です。
+
+-->
+<s:MXAdvancedDataGridItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+								  xmlns:s="library://ns.adobe.com/flex/spark" 
+								  xmlns:mx="library://ns.adobe.com/flex/mx"
+								  focusEnabled="true"
+								  dataChange="mxadvanceddatagriditemrenderer1_dataChangeHandler(event)">
+	<fx:Script>
+		<![CDATA[
+			import jp.co.ctc.entity.LgMSps;
+			import jp.co.ctc.entity.LgMOrder;
+			
+			import mx.collections.ArrayCollection;
+			import mx.collections.IList;
+			import mx.events.FlexEvent;
+			
+			import spark.events.IndexChangeEvent;
+			
+			/**
+			 * グリッドにデータがセットされたときの処理
+			 */
+			protected function mxadvanceddatagriditemrenderer1_dataChangeHandler(event:FlexEvent):void
+			{
+				// dataProviderがセットされていなければセットする
+				if (cmbboxInsSps.dataProvider == null){
+					cmbboxInsSps.dataProvider = parentApplication.DdlList;
+				}
+				// 初期値をセット
+				cmbboxInsSps.selectedIndex = 0;
+				
+				if (data != null && data.mOrderList != null && data.mOrderList.length > 0){
+					var spsList:IList = cmbboxInsSps.dataProvider;
+					var loop_cnt:int;
+					
+					for (loop_cnt=0;loop_cnt<spsList.length;loop_cnt++ ){
+						if ( (spsList[loop_cnt] as LgMSps).spsCode == data.mOrderList[0].spsCode){
+							cmbboxInsSps.selectedIndex = loop_cnt;
+							break;
+						}
+					}
+				}
+				// 本番マスタ選択時は選択不可
+				if(parentApplication.selectMst==1){
+					cmbboxInsSps.enabled = false;
+				}
+			}
+			
+			/**
+			 * コンボボックス上でデータが変更されたときの処理
+			 */
+			protected function cmbboxInsSps_changeHandler(event:IndexChangeEvent):void
+			{
+				// MOrderレコードが存在するかチェック
+				if (data.mOrderList != null && data.mOrderList.length > 0 ){
+					// MOrderが存在する場合、上書き
+					data.mOrderList[0].spsCode = cmbboxInsSps.selectedItem.spsCode;
+					
+					if (data.editDiv!="I") {
+						data.editDiv = "U";
+					}
+					
+					if (data.mOrderList[0].editDiv!="I") {
+						data.mOrderList[0].editDiv = "U";
+						data.mOrderList[0].takeOrder = 0;
+						data.mOrderList[0].updateUser = parentApplication.loginUser;
+					}
+				}
+				else{
+					// MOrderが存在しない場合、MOrder作成
+					var mOrder:LgMOrder = new LgMOrder();
+					mOrder.spsCode = cmbboxInsSps.selectedItem.spsCode;
+					mOrder.editDiv = "I";
+					mOrder.insertUser = parentApplication.loginUser;
+					
+					if (data.editDiv!="I") {
+						data.editDiv = "U";
+					}
+					
+					if (data.mOrderList == null) {
+						data.mOrderList = new ArrayCollection();
+					}
+					
+					data.mOrderList.addItem(mOrder);
+				}
+				// dummyの使用目的
+				// 上記のif-elseの処理を行ってもGridの更新イベントが実行されないケースがある。
+				// 強制的にGridを更新する為にDummyの値を変更する。
+				data.dummy = data.dummy +1;
+			}
+		]]>
+	</fx:Script>
+	<s:ComboBox id="cmbboxInsSps" width="100%" horizontalCenter="0" labelField="spsName" change="cmbboxInsSps_changeHandler(event)"/>
+</s:MXAdvancedDataGridItemRenderer>

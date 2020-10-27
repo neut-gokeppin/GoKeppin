@@ -1,0 +1,1266 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:mx="library://ns.adobe.com/flex/mx" pageTitle="誤欠品検出力向上ツール - 検査項目マスタメンテナンス"
+			   creationComplete="application1_creationCompleteHandler(event)" xmlns:components="jp.co.ctc.components.*">
+	<s:layout>
+		<s:VerticalLayout paddingLeft="8" paddingRight="8" paddingTop="8" paddingBottom="8" horizontalAlign="center" gap="8"/>
+	</s:layout>
+
+	<fx:Style source="lfa_inspection.css"/>
+
+	<!-- 2016/02/24 DA ins start -->
+	<fx:Metadata>
+		[ResourceBundle("message")]
+		[ResourceBundle("resource")]
+	</fx:Metadata>
+	<!-- 2016/02/24 DA ins end -->
+
+	<fx:Script>
+		<![CDATA[
+			import jp.co.ctc.components.GroupComboBox;
+			import jp.co.ctc.entity.MGroup;
+			import jp.co.ctc.entity.MItem;
+			import jp.co.ctc.entity.MOrder;
+			import jp.co.ctc.entity.MUser;
+			import jp.co.ctc.entity.MVehicle;
+			import jp.co.ctc.event.MstSelectEvent;
+			import jp.co.ctc.util.MUserUtils;
+			import jp.co.ctc.util.Utils;
+			
+			import mx.collections.IList;
+			import mx.controls.Alert;
+			import mx.events.AdvancedDataGridEvent;
+			import mx.events.CloseEvent;
+			import mx.events.CollectionEvent;
+			import mx.events.CollectionEventKind;
+			import mx.events.DataGridEvent;
+			import mx.events.FlexEvent;
+			import mx.events.ListEvent;
+			import mx.events.PropertyChangeEvent;
+			import mx.events.ScrollEvent;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+
+
+			private var rmenu:ContextMenu;
+			private var rmenuitem1:ContextMenuItem;
+			private var rmenuitem2:ContextMenuItem;
+			private var rmenuIndex:int = -1;
+			private var rmenuItem:MItem;
+			private var removedRows:ArrayCollection = new ArrayCollection();
+			private var TITLE:String = "検査項目マスタメンテナンス";
+			// 編集中の車種区分を保持する変数
+			private var editBctype:String = "";
+			// 2016/02/24 DA ins start
+			// 編集中の工程を保持する変数
+			private var editGroupName:String = "";
+			// 2016/02/24 DA ins end
+
+			// グリッド内の工程コンボボックスに表示するリスト
+			public var DdlList:ArrayCollection = new ArrayCollection();
+
+			// 2016/02/24 DA ins start
+			public var gridScrollPosition:int = 0; // 表示行のインデックス
+			/**
+			 * 入力項目は編集不可のフラグである
+			 */
+			public var isItemMainte :Boolean = true;
+			public var loginUserInfo:MUser; //ログインユーザ情報
+			/**
+			 * 車種の予約フラグ
+			 */
+			public var isReservedMVehicle:Boolean = false;
+			// 2016/02/24 DA ins end
+
+			// メニュー&ログイン画面から選択されたマスタ、従業員コードを取得するように修正する
+			public var selectMst:int = 0;
+			public var loginUser:String = "";
+
+
+			/**
+			 * アプリケーション初期化
+			 * ユーザーコードの取得
+			 */
+			protected function application1_creationCompleteHandler(event:FlexEvent):void
+			{
+				// Debug用 ****************************************
+				//　Debugログインさせ、ログインが行われたようにする。
+				//srvUser.login("1");
+				//srvUser.setSelectMst(0);
+
+				//ユーザーコードを取得
+				srvUser.getUserCode();
+
+				// 車種マスタを取得
+				srvVehicle.getMVehicle();
+
+				// Alertのボタンの幅を変更
+				// デフォルトの60だと"キャンセル"の文字が表示しきれない。
+				Alert.buttonWidth = 100;
+
+			}
+			/**
+			 * ユーザーコードの取得後の処理。
+			 * ユーザーコードを持っていなければログイン画面に戻します。
+			 */
+			protected function getUserCode_resultHandler(event:ResultEvent):void
+			{
+				//ユーザコードがなければログインページに戻す
+				if (event.result==null) {
+					var request:URLRequest = new URLRequest("login.html");
+					navigateToURL(request, "_self");
+					return;
+				}
+				else{
+					this.loginUser = event.result.toString();
+					//セレクトマスタを取得
+					srvUser.getSelectMst();
+					
+					// 2016/02/24 DA ins start
+					// ログインユーザ情報を取得
+					srvUser.getMUser(this.loginUser);
+					// 2016/02/24 DA ins end
+				}
+			}
+
+			/**
+			 * セレクトマスタの取得後の処理。
+			 * 選択したマスタに対応した表示・処理を行います。
+			 */
+			protected function getSelectMst_resultHandler(event:ResultEvent):void
+			{
+				selectMst = parseInt(event.result.toString());
+
+				// 2016/02/24 DA upd start
+				selectMst_Label.text = MstSelectEvent.getMasterName(selectMst);
+
+				//if (selectMst==1) {
+				if (MstSelectEvent.isReal(selectMst)) {
+				// 2016/02/24 DA upd end
+					// 本番マスタ選択時
+					// 2016/02/24 DA del start
+//					selectMst_Label.text = "本番";
+					// 2016/02/24 DA del end
+					btnSaveData.enabled = false;
+
+					grid.editable = "false";
+				} else {
+					// 仮マスタ選択時
+					// 2016/02/24 DA del start
+//					selectMst_Label.text = "仮";
+						
+//					// システムメニュー設定
+//					rmenu = new ContextMenu();
+//					rmenu.hideBuiltInItems();
+//					rmenu.addEventListener(ContextMenuEvent.MENU_SELECT, rmenu_menuSelectHandler);
+//					rmenuitem1 = new ContextMenuItem("行を追加");
+//					rmenuitem1.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, addRowHandler);
+//					rmenu.customItems.push(rmenuitem1);
+//					rmenuitem2 = new ContextMenuItem("行を削除");
+//					rmenuitem2.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, removeRowHandler);
+//					rmenu.customItems.push(rmenuitem2);
+					// 2016/02/24 DA del end
+
+					grid.editable = "true";
+				}
+				srvGroup.getMGroupNames(selectMst);
+			}
+
+			/**
+			 * 右クリックメニュー表示時の処理
+			 */
+			private function rmenu_menuSelectHandler(event:ContextMenuEvent):void {
+				// 右クリックされた行を保持しておく
+				if (-1 < rmenuIndex && rmenuIndex < acGrid.length) {
+					rmenuItem = acGrid.getItemAt(rmenuIndex) as MItem;
+				} else {
+					rmenuItem = null;
+				}
+			}
+
+			/**
+			 * 工程名取得完了Event。
+			 * 工程の検索条件を初期化する
+			 */
+			private function onGroupNamesResult(e:ResultEvent):void
+			{
+				var groupNames:IList = srvGroup.getMGroupNames.lastResult as IList;
+				groupNames.addItemAt( "工程なし", 0);
+				groupNames.addItemAt( "全て", 0);
+
+				// 工程ドロップダウンリストにセット
+				ddlGroup.dataProvider = groupNames;
+
+				// 「全て」を選択状態にする
+				ddlGroup.selectedIndex = 0;
+			}
+
+			/**
+			 * MGroup取得完了Event。
+			 * 検査項目ごとの工程コンボボックスに表示する
+			 * MGroupリストを初期化する
+			 */
+			private function onGroupResult(e:ResultEvent):void
+			{
+				DdlList.removeAll();
+
+				DdlList.addAll(srvGroup.getMGroups.lastResult);
+
+				var groupSpcM:MGroup = new MGroup();
+				groupSpcM.groupName = "";
+
+				DdlList.addItemAt( groupSpcM, 0);
+			}
+
+			/**
+			 * グループ取得失敗時の処理。
+			 */
+			private function onGroupFault(e:FaultEvent):void
+			{
+				Alert.show("Data Get Error", TITLE);
+			}
+
+			/**
+			 * 行追加の処理。
+			 * 追加可能であるかチェックします。
+			 */
+			private function addRowHandler(item:ContextMenuEvent):void {
+				// 行選択チェック
+				if (rmenuItem == null) {
+					Alert.show("追加対象の行を右クリックしてください", TITLE);
+					return;
+				}
+
+				var mItem:MItem = new MItem();
+				// 初期値設定
+				// 2016/02/24 DA ins start
+				mItem.mstVer = selectMst;
+				mItem.itemName = "";
+				mItem.msgNo = "";
+				mItem.notes = "";
+				// 2016/02/24 DA ins end
+				mItem.editDiv = "I";
+				mItem.itemNo = "000";
+				mItem.resultDiv = "1";
+				mItem.msgDiv = false;
+				mItem.bctype = editBctype;
+				mItem.tireDiv = false;
+				mItem.okngDiv = false;
+
+				mItem.insertUser = loginUser;
+				var row:int = acGrid.getItemIndex(rmenuItem);
+				acGrid.addItemAt(mItem, row + 1);
+			}
+
+			/**
+			 * 行削除の処理。
+			 * 削除可能であるかチェックします。
+			 */
+			private function removeRowHandler(item:ContextMenuEvent):void {
+				// 行選択チェック
+				if (rmenuItem == null) {
+					Alert.show("削除対象の行を右クリックしてください", TITLE);
+					return;
+				}
+
+				// 2016/02/24 DA ins start
+				// 予約中の場合
+				if (rmenuItem.checkReserveFlag()) {
+					Alert.show("予約中の場合は削除できません", TITLE);
+					return;
+				}
+				// 2016/02/24 DA ins end
+
+				if (rmenuItem.editDiv != "I") {
+					removedRows.addItem(rmenuItem);
+				}
+
+				var row:int = acGrid.getItemIndex(rmenuItem);
+				acGrid.removeItemAt(row);
+			}
+
+
+			/**
+			 * グリッドの値を持つArrayの値が変更された時の処理。
+			 * グリッドの新規追加・削除・更新に対応した処理を行います。
+			 */
+			protected function acGrid_collectionChangeHandler(event:CollectionEvent):void
+			{
+				switch(event.kind) {
+					case CollectionEventKind.RESET:
+						// 右クリックメニューをセット
+						grid.contextMenu = rmenu;
+						// 2016/02/24 DA ins start
+						this.grid.verticalScrollPosition = this.gridScrollPosition;
+						this.grid.initialize();
+						this.grid.dataProvider.refresh();
+						// 2016/02/24 DA ins end
+						break;
+					case CollectionEventKind.ADD:
+						//追加された行を選択状態にする
+						grid.selectedIndex = event.location;
+						break;
+					case CollectionEventKind.REMOVE:
+//						var item:MItem = event.items[0] as MItem;
+//						if(item.editDiv != "I"){
+//							removedRows.addItem(item);
+//						}
+						break;
+					case CollectionEventKind.UPDATE:
+						if ((event.items[0] as PropertyChangeEvent).property != "editDiv"    &&
+							(event.items[0] as PropertyChangeEvent).property != "insertUser" &&
+							(event.items[0] as PropertyChangeEvent).property != "updateUser" ) {
+
+							// 編集区分にU:変更をセット & 更新者にログインユーザーをセット
+							if ((acGrid[grid.selectedIndex] as MItem).editDiv != "I") {
+								(acGrid[grid.selectedIndex] as MItem).editDiv = "U";
+							}
+							(acGrid[grid.selectedIndex] as MItem).updateUser = loginUser;
+						}
+						break;
+				}
+			}
+
+
+			/**
+			 * 検索ボタン押下時の処理。
+			 */
+			protected function btnGetData_clickHandler(event:MouseEvent):void
+			{
+
+				var groupCode:int;
+				var updExists:Boolean = false;
+				var item:MItem;
+
+				// 車種選択チェック
+				if (ddlVehicle.selectedItem == null) {
+					Alert.show("車種を選択してください", TITLE);
+					return;
+				}
+
+				// 2016/02/24 DA del start
+				//// 選択された車種を取得
+				//editBctype = (ddlVehicle.selectedItem as MVehicle).bctype;
+				// 2016/02/24 DA del end
+
+				//-----------------------------------
+				// 保存対象有無チェック
+				//-----------------------------------
+
+				// 削除有無チェック
+				if (removedRows.length>0) {
+					updExists = true;
+				}
+
+				if (updExists == false) {
+					// 追加・変更有無チェック
+					for (var loop_cnt:int =0;loop_cnt < acGrid.length; loop_cnt++) {
+						item = acGrid[loop_cnt];
+						if (item.editDiv != null) {
+							updExists = true;
+							break;
+						}
+					}
+				}
+
+				if (updExists==true) {
+					// 編集なし
+					Alert.show("変更が保存されていません。\n検索すると変更が破棄されます。よろしいですか？",
+						TITLE,
+						Alert.OK | Alert.CANCEL, this,
+						function(event:CloseEvent):void {
+							if (event.detail == Alert.OK) {
+								itemDataGet();
+								return;
+							}
+						},
+						// 2016/08/29 DA ins start
+						null,
+						Alert.CANCEL
+						// 2016/08/29 DA ins end
+					);
+				} else {
+					itemDataGet();
+				}
+			}
+
+			/**
+			 * 選択したグループ・selectMstに対応する
+			 * 検査項目を取得（removedRowsの初期化も同時に行う）
+			 */
+			protected function itemDataGet():void {
+
+				// 2016/02/24 DA upd start
+				//// グループドロップダウンリスト選択状態取得
+				//if( ddlGroup.selectedIndex==0 ){
+				//	// 項目検索条件 -> 全表示
+				//	srv.getMItems(selectMst, null, editBctype, "_all groups");
+				//} else if  (ddlGroup.selectedIndex==1) {
+				//	// 項目検索条件 -> 工程なしのみ
+				//	srv.getMItems(selectMst, null, editBctype, "_no groups");
+				//} else {
+				//	// グループ選択
+				//	var groupName:String = ddlGroup.selectedItem as String;
+				//	srv.getMItems(selectMst, null, editBctype, groupName);
+				//}
+				// 車種を取得
+				editBctype = (ddlVehicle.selectedItem as MVehicle).bctype;
+
+				// 工程を取得
+				if　(ddlGroup.selectedIndex　==　0)　{
+					// 項目検索条件 -> 全表示
+					editGroupName = "_all groups";
+				}
+				else if (ddlGroup.selectedIndex　==　1) {
+					// 項目検索条件 -> 工程なしのみ
+					editGroupName = "_all groups";
+				}
+				else {
+					editGroupName = ddlGroup.selectedItem as String;
+				}
+
+				if (MstSelectEvent.isTemporary(selectMst)) {
+					// 車種の予約フラグを取得
+					srvMstRegist.isReservedMVehicle(selectMst, editBctype);
+					srvMstRegist.isReservedVehicleGroup(selectMst, editBctype, editGroupName);				
+				}
+				else {
+					getItemData();
+				}
+				
+				// 2016/02/24 DA upd end
+			}
+
+			// 2016/02/24 DA ins start
+			/**
+			 * 表示するデータを取得
+			 */
+			private function getItemData():void
+			{
+				srv.getMItems(selectMst, null, editBctype, editGroupName);
+
+				//検査項目ごとの工程コンボボックスに表示するデータを検索
+				srvGroup.getMGroups(selectMst, null, editBctype);
+
+				// removedRowsを初期化
+				removedRows = new ArrayCollection();
+				
+				this.gridScrollPosition = this.grid.verticalScrollPosition;
+				this.grid.initialize();
+				this.grid.dataProvider.refresh();
+			}
+
+			/**
+			 * 車種の予約フラグ取得成功時の処理
+			 */
+			protected function isReservedMVehicle_resultHandler(event:ResultEvent):void
+			{
+				// 権限チェック
+				if (event.result != null && event.result) {
+					// 予約の場合は保存ボタンを非活性する
+					btnSaveData.enabled = false;
+					this.grid.editable = "false";
+					isReservedMVehicle = true;
+					rmenu = null;
+				}
+				else {
+					isReservedMVehicle = false;
+					if (MUserUtils.isAdministrator(this.loginUserInfo)) {
+						btnSaveData.enabled = true;
+						this.grid.editable = "true";
+
+						// システムメニュー設定
+						rmenu = new ContextMenu();
+						rmenu.hideBuiltInItems();
+						rmenu.addEventListener(ContextMenuEvent.MENU_SELECT, rmenu_menuSelectHandler);
+						rmenuitem1 = new ContextMenuItem("行を追加");
+						rmenuitem1.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, addRowHandler);
+						rmenu.customItems.push(rmenuitem1);
+						rmenuitem2 = new ContextMenuItem("行を削除");
+						rmenuitem2.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, removeRowHandler);
+						rmenu.customItems.push(rmenuitem2);
+					}
+					else {
+						btnSaveData.enabled = false;
+						this.grid.editable = "false";
+						rmenu = null;
+					}
+				}
+
+				getItemData();
+			}
+			// 2016/02/24 DA ins end
+
+			// 2017/12/01 DA ins start
+			/**
+			 * 撮影システム自動反映ボタン押下時の処理。
+			 */
+			protected function btnShotFileOutput_clickHandler(event:MouseEvent):void
+			{
+				// 車種の未選択チェック
+				if (ddlVehicle.selectedItem == null) {
+					// 車種を選択してください。
+					Alert.show(resourceManager.getString('message','msg00045'), TITLE);
+					return;
+				}
+				
+				// 撮影画像工程の未選択チェック
+				var isResult:Boolean = Utils.isJudgmentShotimage(ddlGroup.selectedItem as String);
+
+				if (isResult == false) {
+					// 撮影画像工程を選択してください。
+					Alert.show(resourceManager.getString('message','msg00059'), TITLE);
+					return;
+				}
+				
+				// 編集ありチェック
+				if (Utils.updateExists(acGrid, removedRows)) {
+					// 変更が保存されていません。\n保存、または再検索してから再度、実行してください。
+					Alert.show(resourceManager.getString('message','msg00014'), TITLE);
+					return;
+				}
+
+				createShotFileOutput();
+			}
+
+			/**
+			 * マスタ情報出力処理
+			 */
+			private function createShotFileOutput():void {
+				
+				// 車種を取得
+				editBctype = (ddlVehicle.selectedItem as MVehicle).bctype;
+				
+				// 工程を取得
+				editGroupName = ddlGroup.selectedItem as String;
+
+				srv.createShotFile(this.selectMst, editBctype, editGroupName, this.loginUser);				
+			}
+			
+			/**
+			 * マスタ情報出力処理（呼び出しの正常終了）
+			 */
+			protected function onCreateShotFileResult(event:ResultEvent):void
+			{
+				if (event.result==null) {
+					// サーバー処理の呼出が出来ませんでした
+					Alert.show(resourceManager.getString('message','msg00033'), TITLE);
+				}
+				else {
+					var ret:int = parseInt(event.result.toString());
+					if (ret == -1){
+						// 撮影システムへ渡すマスタ情報のファイルに出力ができませんでした。
+						Alert.show(resourceManager.getString('message','msg00061'), TITLE);
+					}
+					else {
+						// 撮影システムへ渡すマスタ情報のファイルが出力されました。
+						Alert.show(resourceManager.getString('message','msg00060'), TITLE);
+					}
+				}
+			}
+
+			/**
+			 * マスタ情報出力処理（呼び出しの異常終了、通信エラー）
+			 */
+			private function onCreateShotFileFault(event:FaultEvent):void
+			{
+				// 撮影システム自動反映処理でエラーが発生しました。
+				Alert.show(resourceManager.getString('message','msg00062'), TITLE);
+			}
+			// 2017/12/01 DA ins end
+			
+			/**
+			 * 保存ボタン押下時の処理。
+			 */
+			protected function btnSaveData_clickHandler(event:MouseEvent):void
+			{
+				// 2016/02/24 DA ins start
+				// 変更有無チェック
+				if (!existsUpdate()) {
+					Alert.show("保存する内容がありません", TITLE);
+					return;
+				}
+
+				// 予約中チェック
+				var itemCodeList:ArrayCollection = new ArrayCollection();
+				var item:MItem;
+				var loop_cnt:int;
+				// 削除した項目コードを取得
+				for (loop_cnt = 0; loop_cnt < removedRows.length; loop_cnt++) {
+					item = removedRows[loop_cnt];
+					itemCodeList.addItem(item.itemCode);
+				}
+				// 変更した項目コードを取得
+				for (loop_cnt = 0; loop_cnt < acGrid.length; loop_cnt++) {
+					item = acGrid[loop_cnt];
+					if (item.editDiv == "U") {
+						itemCodeList.addItem(item.itemCode);
+					}
+				}
+				srvMstRegist.isReservedVehicleItem(selectMst, editBctype, itemCodeList);
+				// 2016/02/24 DA ins end
+			}
+
+			/**
+			 * 保存ボタン押下時の処理（チェック後の処理）
+			 */
+			protected function isReservedVehicleItem_resultHandler(event:ResultEvent):void
+			{
+				// 2016/02/24 DA ins start
+				if (event.result != null && event.result) {
+					// 予約されているため、保存することができません。
+					Alert.show(resourceManager.getString('message','msg00023'), TITLE);
+					return;
+				}
+				// 2016/02/24 DA ins end
+
+				// 変数定義
+				var loop_cnt:int;
+				var updExists:Boolean = false;
+				var item:MItem;
+
+				// 2016/02/24 DA del start
+				////-----------------------------------
+				//// 保存対象有無チェック
+				////-----------------------------------
+				//// 削除有無チェック
+				//if (removedRows.length>0) {
+				//	updExists = true;
+				//}
+				//
+				//if (updExists == false) {
+				//	// 変更・追加有無チェック
+				//	for (loop_cnt=0;loop_cnt < acGrid.length; loop_cnt++) {
+				//		item = acGrid[loop_cnt];
+				//		if (item.editDiv != null) {
+				//			updExists = true;
+				//			break;
+				//		}
+				//	}
+				//}
+				//
+				//if (updExists==false) {
+				//	// 編集なし
+				//	Alert.show("保存する内容がありません", TITLE);
+				//	return;
+				//}
+				// 2016/02/24 DA del end
+
+				//-----------------------------------
+				// データチェック
+				//-----------------------------------
+				var tireCount:int = 0;
+				for (loop_cnt=0;loop_cnt < acGrid.length; loop_cnt++) {
+					item = acGrid[loop_cnt];
+
+					// タイヤメーカ項目をカウントしておく。後でチェックに使用
+					if (item.tireDiv) {
+						tireCount++;
+					}
+
+					if (item.editDiv == null) {
+						// 変更・追加でなければ何もしない。
+						continue;
+					}
+
+					if (item.itemName==null || Utils.isSpaceJ(item.itemName)){
+						Alert.show("項目名が空白です。", TITLE);
+						Utils.gridSelectRow(grid,loop_cnt);
+						return;
+					}
+
+					if (item.itemName.length > 30){
+						Alert.show("項目名は30文字以内にしてください。", TITLE);
+						Utils.gridSelectRow(grid,loop_cnt);
+						return;
+					}
+
+					if (item.notes != null && item.notes.length > 50){
+						Alert.show("備考は50文字以内にしてください。", TITLE);
+						Utils.gridSelectRow(grid,loop_cnt);
+						return;
+					}
+
+					// Msg を使用しない場合はチェックする項目なし
+					if (item.msgDiv==false) {
+						continue;
+					}
+
+					//Msg No.必須チェック
+					if (Utils.isSpaceJ(item.msgNo)){
+						Alert.show("メッセージNo.を入力してください。", TITLE);
+						Utils.gridSelectRow(grid,loop_cnt);
+						return;
+					}
+
+					// Msg No.桁数チェック
+					if (Utils.jTrim(item.msgNo).length != 4) {
+						Alert.show("メッセージNo.は4桁です。", TITLE);
+						Utils.gridSelectRow(grid,loop_cnt);
+						return;
+					}
+
+					//Msg No.大文字に変換
+					item.msgNo = item.msgNo.toUpperCase();
+				}
+
+				// 2014/04/07 DA del start
+//				// タイヤメーカ項目数チェック
+//				if (tireCount != 0 && tireCount != 4) {
+//					Alert.show("タイヤメーカは、「4項目ON」もしくは「全てOFF」にしてください。", TITLE);
+//					return;
+//				}
+				// 2014/04/07 DA del end
+
+				// 2016/02/24 DA ins start
+				this.gridScrollPosition = this.grid.verticalScrollPosition; // 表示行を一時退避する
+				// 2016/02/24 DA ins end
+
+				//保存ボタンを非活性にする
+				btnSaveData.enabled = false;
+
+				// 変更内容をデータベースに反映
+				srv.updateAll(acGrid, removedRows);
+
+				// データベースから最新のデータを取得
+				itemDataGet();
+			}
+
+
+			/**
+			 * 終了ボタン押下時の処理。
+			 */
+			protected function btnExit_clickHandler(event:MouseEvent):void
+			{
+				var updExists:Boolean = false;
+				var item:MItem;
+
+				// 本番マスタ選択時は確認不要
+				// 2016/02/24 DA upd start
+//				if (selectMst == 1) {
+				if (MstSelectEvent.isReal(selectMst)) {
+				// 2016/02/24 DA upd end
+					// Browserを閉じる
+					close();
+					return;
+				}
+
+				// 変更有無チェック
+				for (var loop_cnt:int =0;loop_cnt < acGrid.length; loop_cnt++) {
+					item = acGrid[loop_cnt];
+					if (item.editDiv != null) {
+						updExists = true;
+						break;
+					}
+				}
+
+				// 削除チェック
+				if (removedRows.length > 0)
+				{
+					updExists = true;
+				}
+
+				if (updExists==true) {
+					// 編集あり
+					Alert.show("変更が保存されていません。終了してもよろしいですか？",
+						TITLE,
+						Alert.OK | Alert.CANCEL, this,
+						function(event:CloseEvent):void {
+							if (event.detail == Alert.OK) {
+								close();
+								return;
+							}
+						},
+						// 2016/08/29 DA ins start
+						null,
+						Alert.CANCEL
+						// 2016/08/29 DA ins end
+					);
+					return;
+				}
+
+				// メニュー画面に戻る
+				close();
+			}
+
+
+			/**
+			 * ユーザーによる変更があったかどうかをチェックします。
+			 * 【戻り値】true:変更あり、false:変更なし
+			 */
+			private function existsUpdate():Boolean
+			{
+				// 削除有無チェック
+				if (removedRows.length > 0) {
+					// 変更あり
+					return true;
+				}
+
+				// 追加、変更有無チェック
+				if (acGrid != null) {
+					for (var loop_cnt:int = 0; loop_cnt < acGrid.length; loop_cnt++) {
+						var data:MItem = acGrid[loop_cnt] as MItem;
+						if (data.editDiv != null) {
+							// 変更あり
+							return true;
+						}
+					}
+				}
+
+				// 変更なし
+				return false;
+			}
+
+			/**
+			 * 表示された画面を閉じ、ページ遷移を行います。
+			 */
+			private function close():void
+			{
+				// マスタメンテナンスメニュー画面に遷移する
+				var request:URLRequest = new URLRequest("master_menu.html");
+				navigateToURL(request, "_self");
+			}
+
+			/**
+			 * グリッドに表示させるフィルターの設定です。
+			 * 現在Filterは未使用です。
+			 */
+			public function doFilter(item:Object):Boolean {
+
+				var mItem:MItem;
+				mItem = item as MItem;
+				var groupCode:int;
+
+
+				//------------------------------------------
+				// 項目検索条件 -> 全表示
+				//------------------------------------------
+				if( ddlGroup.selectedIndex==0 ){
+					return true;
+				}
+
+				//------------------------------------------
+				// 項目検索条件 -> グループなしのみ
+				//------------------------------------------
+				if (ddlGroup.selectedIndex==1) {
+
+					// 検査順データがなければグループなし
+					if (mItem.mOrderL == null || mItem.mOrderR == null ) {
+						return true;
+					}
+					// 検査順データがなければグループなし
+					if (mItem.mOrderL.length == 0 || mItem.mOrderR.length == 0 ) {
+						return true;
+					}
+
+					// 空白が選択された行はグループCodeに0がセットされる。
+					if( (mItem.mOrderL[0] as MOrder).groupCode == 0  ||
+						(mItem.mOrderR[0] as MOrder).groupCode == 0 ){
+						return true;
+					}
+					return false;
+				}
+
+				//------------------------------------------
+				// 項目検索条件 -> グループ指定
+				//------------------------------------------
+				groupCode = (ddlGroup.selectedItem as MGroup).groupCode;
+
+				// 左ハンドルのグループチェック
+				if (mItem.mOrderL != null && mItem.mOrderL.length > 0 ) {
+					if((mItem.mOrderL[0] as MOrder).groupCode == groupCode){
+						return true;
+					}
+				}
+
+				// 右ハンドルのグループチェック
+				if (mItem.mOrderR != null && mItem.mOrderR.length > 0 ) {
+					if((mItem.mOrderR[0] as MOrder).groupCode == groupCode){
+						return true;
+					}
+				}
+
+				return false;
+			}
+
+			/**
+			 * グリッドの「検査順」項目に表示させるグループNo.-検査順の取得(左ハンドル用)
+			 * @return グループNo.-検査順の文字列
+			 */
+			private function groupNoSeqLColumnFunction(item:Object, column:AdvancedDataGridColumn):String {
+
+				var tempStr:String = "";
+
+				if (item.mOrderL!=null && item.mOrderL.length > 0 ) {
+					//グループなしだった場合は空白を返す
+					if (getGroupNo(item.mOrderL[0].groupCode) == null) {
+						return "";
+					}
+					tempStr = tempStr + getGroupNo(item.mOrderL[0].groupCode) + "-" + item.mOrderL[0].inspecOrder;
+				}
+
+				return tempStr;
+			}
+
+			/**
+			 * グリッドの「検査順」項目に表示させるグループNo.-検査順の取得(右ハンドル用)
+			 * @return グループNo.-検査順の文字列
+			 */
+			private function groupNoSeqRColumnFunction(item:Object, column:AdvancedDataGridColumn):String {
+				var tempStr:String = "";
+
+				if (item.mOrderR!=null && item.mOrderR.length > 0 ) {
+					//グループなしだった場合は空白を返す
+					if (getGroupNo(item.mOrderR[0].groupCode) == null) {
+						return "";
+					}
+					tempStr = tempStr + getGroupNo(item.mOrderR[0].groupCode) + "-" + item.mOrderR[0].inspecOrder;
+				}
+				return tempStr;
+			}
+
+
+			/**
+			 * グループコードからグループNo.を取得します。
+			 * @param グループコード
+			 * @return グループNo.
+			 */
+			private function getGroupNo(groupCode:int):String{
+				var loop_cnt:int;
+
+				for(loop_cnt=0;loop_cnt<acDdl.length;loop_cnt++){
+					if ( (acDdl[loop_cnt] as MGroup).groupCode == groupCode ){
+						return (acDdl[loop_cnt] as MGroup).groupNo;
+					}
+				}
+				return "";
+			}
+
+
+			/**
+			 * 検査順によるグリッドのソートを行います。(左ハンドル用)
+			 */
+			private function doSortGroupNoOrderL(obj1:Object, obj2:Object):int{
+
+				var itemA:MItem = obj1 as MItem;
+				var itemB:MItem = obj2 as MItem;
+
+				//--------------------------------
+				// どちらもグループなし
+				//--------------------------------
+				if ( (itemA.mOrderL == null || itemA.mOrderL.length == 0) &&
+					 (itemB.mOrderL == null || itemB.mOrderL.length == 0)     ) {
+
+					// ItemNo.が小さい方を先に表示
+					if (itemA.itemNo < itemB.itemNo) {
+						return -1;
+					}else{
+						return 1;
+					}
+				}
+
+				//--------------------------------
+				// 片方だけグループなし
+				//--------------------------------
+				if ( itemA.mOrderL == null || itemA.mOrderL.length == 0 ) {
+					return 1;
+				}
+
+				if ( itemB.mOrderL == null || itemB.mOrderL.length == 0 ) {
+					return -1;
+				}
+
+				//--------------------------------
+				// 両方グループあり
+				//--------------------------------
+
+				// グループNo.取得
+				var groupNoA:String = getGroupNo(itemA.mOrderL[0].groupCode);
+				var groupNoB:String = getGroupNo(itemB.mOrderL[0].groupCode);
+
+				// グループNo.が小さい方を前に表示
+				if (groupNoA < groupNoB ) {
+					return -1;
+				} else if (groupNoA > groupNoB) {
+					return 1;
+				}
+
+				// 検査順取得
+				var orderA:MOrder = itemA.mOrderL[0];
+				var orderB:MOrder = itemB.mOrderL[0];
+
+				// グループNo.が同じなら検査順の小さい方を前に表示
+				if (orderA.inspecOrder<orderB.inspecOrder) {
+					return -1;
+				}else {
+					return 1;
+				}
+				return 0;
+			}
+
+			/**
+			 * 検査順によるグリッドのソートを行います。(右ハンドル用)
+			 */
+			private function doSortGroupNoOrderR(obj1:Object, obj2:Object):int{
+
+				var itemA:MItem = obj1 as MItem;
+				var itemB:MItem = obj2 as MItem;
+
+				//--------------------------------
+				// どちらもグループなし
+				//--------------------------------
+				if ( (itemA.mOrderR == null || itemA.mOrderR.length == 0) &&
+					(itemB.mOrderR == null || itemB.mOrderR.length == 0)     ) {
+
+					// ItemNo.が小さい方を先に表示
+					if (itemA.itemNo < itemB.itemNo) {
+						return -1;
+					}else{
+						return 1;
+					}
+				}
+
+				//--------------------------------
+				// 片方だけグループなし
+				//--------------------------------
+				if ( itemA.mOrderR == null || itemA.mOrderR.length == 0 ) {
+					return 1;
+				}
+
+				if ( itemB.mOrderR == null || itemB.mOrderR.length == 0 ) {
+					return -1;
+				}
+
+				//--------------------------------
+				// 両方グループあり
+				//--------------------------------
+
+				// グループNo.取得
+				var groupNoA:String = getGroupNo(itemA.mOrderR[0].groupCode);
+				var groupNoB:String = getGroupNo(itemB.mOrderR[0].groupCode);
+
+				// グループNo.が小さい方を前に表示
+				if (groupNoA < groupNoB ) {
+					return -1;
+				} else if (groupNoA > groupNoB) {
+					return 1;
+				}
+
+				// 検査順取得
+				var orderA:MOrder = itemA.mOrderR[0];
+				var orderB:MOrder = itemB.mOrderR[0];
+
+				// グループNo.が同じなら検査順の小さい方を前に表示
+				if (orderA.inspecOrder<orderB.inspecOrder) {
+					return -1;
+				}else {
+					return 1;
+				}
+
+				return 0;
+			}
+
+
+			/**
+			 * Data更新正常完了
+			 */
+			private function onUpdateAllResult(e:ResultEvent):void
+			{
+				Alert.show("保存が完了しました。", TITLE);
+				btnSaveData.enabled = true;
+			}
+
+			/**
+			 * Data更新Error Event
+			 */
+			private function onUpdateAllFault(e:FaultEvent):void
+			{
+				Alert.show("保存に失敗しました。", TITLE);
+				btnSaveData.enabled = true;
+			}
+
+			/**
+			 * Data取得Error Event (MGroup)
+			 */
+			private function ongetMItemsFault(e:FaultEvent):void
+			{
+				Alert.show("データの取得に失敗しました。", TITLE);
+			}
+
+			/**
+			 * グリッド上のデータにマウスが乗ったときの処理
+			 */
+			protected function grid_itemRollOverHandler(event:ListEvent):void
+			{
+				// マウスカーソルの乗っている行を保持しておく。
+				// 右クリックで使用する
+				rmenuIndex = event.rowIndex;
+			}
+
+			// 2016/02/24 DA ins start
+			protected function gird_itemEditBeginningHandler(event:AdvancedDataGridEvent):void
+			{
+				if(event.itemRenderer != null) {
+					if (MItem(event.itemRenderer.data).checkReserveFlag()){
+						event.preventDefault();
+					}					
+				}
+			}
+			
+			/**
+			 * ユーザーログイン情報の取得後の処理。
+			 */
+			protected function getMUser_resultHandler(event:ResultEvent):void {
+				this.loginUserInfo = event.result as MUser;
+				this.enabledComponent();
+			}
+			
+			/**
+			 * コンポーネントの制御をする
+			 */
+			private function enabledComponent():void
+			{
+				if (MUserUtils.isAdministrator(this.loginUserInfo)) {
+					// マスタ管理者
+					if (MstSelectEvent.isReal(selectMst)) {
+						this.grid.editable = "false";
+						this.btnSaveData.enabled = false;
+						// 2017/12/01 DA ins start
+						this.btnShotFileOutput.enabled = false;
+						// 2017/12/01 DA ins end
+					} else {
+						this.grid.editable = "true";
+						this.btnSaveData.enabled = true;
+						// 2017/12/01 DA ins start
+						this.btnShotFileOutput.enabled = true;
+						// 2017/12/01 DA ins end
+					}
+
+				} else {
+					// 以外
+					this.grid.editable = "false";
+					this.btnSaveData.enabled = false;
+					// 2017/12/01 DA ins start
+					this.btnShotFileOutput.enabled = false;
+					// 2017/12/01 DA ins end
+				}
+			}
+			// 2016/02/24 DA ins end
+			
+			// 2016/02/24 DA ins start
+			/**
+			 * スクロール時に正しいデータを表示する
+			 */
+			protected function grid_scrollHandler(event:ScrollEvent):void
+			{
+				this.gridScrollPosition = this.grid.verticalScrollPosition;
+			}
+			// 2016/02/24 DA ins end
+
+		]]>
+	</fx:Script>
+
+	<fx:Declarations>
+		<!-- 非ビジュアルエレメント (サービス、値オブジェクトなど) をここに配置 -->
+		<s:RemoteObject id="srv" destination="MItemService">
+			<s:method name="getMItems" fault="ongetMItemsFault(event)" />
+			<s:method name="updateAll" result="onUpdateAllResult(event)" fault="onUpdateAllFault(event)" />
+			<s:method name="createShotFile" result="onCreateShotFileResult(event)" fault="onCreateShotFileFault(event)"/>
+		</s:RemoteObject>
+
+		<s:RemoteObject id="srvGroup" destination="MGroupService">
+			<s:method name="getMGroupNames" result="onGroupNamesResult(event)" fault="onGroupFault(event)"/>
+			<s:method name="getMGroups" result="onGroupResult(event)" fault="onGroupFault(event)"/>
+		</s:RemoteObject>
+
+		<s:RemoteObject id="srvVehicle" destination="MVehicleService">
+			<s:method name="getMVehicle" fault="ongetMItemsFault(event)"/>
+		</s:RemoteObject>
+
+		<s:RemoteObject id="srvUser" destination="MUserService">
+			<s:method name="getUserCode" result="getUserCode_resultHandler(event)"/>
+			<s:method name="getSelectMst" result="getSelectMst_resultHandler(event)"/>
+			<s:method name="getMUser" result="getMUser_resultHandler(event)"/>
+		</s:RemoteObject>
+
+		<!-- 2016/02/24 DA ins start -->
+		<s:RemoteObject id="srvMstRegist" destination="mstRegistService">
+			<s:method name="isReservedMVehicle" result="isReservedMVehicle_resultHandler(event)" />
+			<s:method name="isReservedVehicleItem" result="isReservedVehicleItem_resultHandler(event)" />
+		</s:RemoteObject>
+		<!-- 2016/02/24 DA ins end -->
+
+		<s:ArrayCollection id="acGrid" collectionChange="acGrid_collectionChangeHandler(event)" list="{grid.dataProvider as IList}" />
+		<s:ArrayCollection id="acDdl"  list="{srvGroup.getMGroups.lastResult as IList}" />
+
+	</fx:Declarations>
+	<s:HGroup width="100%" height="24" verticalAlign="middle" fontFamily="ＭＳ ゴシック">
+		<s:Label text="検査項目マスタメンテナンス" fontSize="14" fontWeight="bold"/>
+	</s:HGroup>
+	<s:HGroup width="100%" height="24">
+		<s:HGroup width="45%" height="24" textAlign="left" verticalAlign="middle">
+			<s:Label text="車種："/>
+			<s:DropDownList id="ddlVehicle" dataProvider="{srvVehicle.getMVehicle.lastResult}" labelField="vehicleName"></s:DropDownList>
+			<mx:Spacer width="16" height="100%"/>
+			<s:Label text="工程："/>
+			<s:DropDownList id="ddlGroup" width="180"></s:DropDownList>
+			<mx:Spacer height="100%" width="16"/>
+			<s:Button label="検索" height="30" id="btnGetData" click="btnGetData_clickHandler(event)"/>
+		</s:HGroup>
+		<!-- 2016/02/24 DA ins start -->
+		<s:HGroup width="35%" height="24" verticalAlign="middle">
+			<s:Label text="{resourceManager.getString('resource','cli0900001')}" visible="{srvMstRegist.isReservedVehicleGroup.lastResult}"/>
+		</s:HGroup>
+		<!-- 2016/02/24 DA ins end -->
+		<!-- 2017/12/01 DA ins start -->
+		<s:HGroup width="20%" height="24" textAlign="left" verticalAlign="middle">
+			<s:Button label="撮影システム自動反映" height="30" id="btnShotFileOutput" click="btnShotFileOutput_clickHandler(event)"/>
+		</s:HGroup>
+		<!-- 2017/12/01 DA ins end -->
+		<s:HGroup width="20%" height="24" fontFamily="ＭＳ ゴシック" horizontalAlign="right" verticalAlign="middle">
+			<s:Label text="マスタ選択" textAlign="right"/>
+			<s:Label text="仮" fontWeight="bold" id="selectMst_Label"/>
+		</s:HGroup>
+	</s:HGroup>
+
+	<mx:AdvancedDataGrid id="grid" designViewDataType="flat" right="12" left="20" top="20" bottom="60"
+						 editable="true" dataProvider="{srv.getMItems.lastResult}" width="100%" height="100%"
+						 sortExpertMode="true" dragEnabled="false" dropEnabled="false"
+						 itemRollOver="grid_itemRollOverHandler(event)"
+						 itemEditBeginning="gird_itemEditBeginningHandler(event)" 
+						 scroll="grid_scrollHandler(event)">
+		<mx:columns>
+			<mx:AdvancedDataGridColumn headerText="No" editable="false" width="30" dataField="itemCode"
+									   backgroundColor="#C4C4C4" textAlign="right" sortable="true"/>
+			<mx:AdvancedDataGridColumn headerText="項目名" dataField="itemName"
+									   itemRenderer="jp.co.ctc.components.BackgroundColorItemRenderer" width="120"/>
+			<mx:AdvancedDataGridColumn headerText="Msg" dataField="msgDiv" editable="false" width="30" sortable="false"
+									   itemRenderer="jp.co.ctc.components.CheckBox"/>
+			<mx:AdvancedDataGridColumn headerText="MsgNo" width="40" dataField="msgNo" imeMode="{IMEConversionMode.ALPHANUMERIC_HALF}"
+									   itemRenderer="jp.co.ctc.components.BackgroundColorItemRenderer"/>
+			<mx:AdvancedDataGridColumn headerText="桁目" dataField="bcPosition" width="40" editable="false"
+									   itemRenderer="jp.co.ctc.components.NumericStepper"/>
+			<mx:AdvancedDataGridColumn headerText="桁数" dataField="bcLength" width="40" editable="false"
+									   itemRenderer="jp.co.ctc.components.NumericStepper"/>
+			<mx:AdvancedDataGridColumn dataField="tireDiv" headerText="ﾀｲﾔﾒｰｶ" itemRenderer="jp.co.ctc.components.CheckBox" width="50" editable="false" sortable="false"/>
+			<mx:AdvancedDataGridColumn dataField="okngDiv" headerText="一択式" itemRenderer="jp.co.ctc.components.CheckBox" width="45" editable="false" sortable="false" visible="true"/>
+			<mx:AdvancedDataGridColumn headerText="左H工程" width="60" editable="false" dataField="mOrderL"
+									   itemRenderer="jp.co.ctc.components.GroupComboBox"/>
+			<mx:AdvancedDataGridColumn headerText="左H検査順" editable="false" width="60" labelFunction="groupNoSeqLColumnFunction"
+									   backgroundColor="#C4C4C4"  sortable="true" sortCompareFunction="doSortGroupNoOrderL"/>
+			<mx:AdvancedDataGridColumn headerText="右H工程" width="60" editable="false" dataField="mOrderR"
+									   itemRenderer="jp.co.ctc.components.GroupComboBox"/>
+			<mx:AdvancedDataGridColumn headerText="右H検査順" editable="false" width="60"
+									   labelFunction="groupNoSeqRColumnFunction" backgroundColor="#C4C4C4" sortCompareFunction="doSortGroupNoOrderR"/>
+			<mx:AdvancedDataGridColumn headerText="更新者" dataField="updateUser" labelFunction="Utils.updateUserToLabel" editable="false" width="80" backgroundColor="#C4C4C4"/>
+			<mx:AdvancedDataGridColumn headerText="更新日" dataField="updateDate" labelFunction="Utils.updateDateToLabel" editable="false" width="100"  backgroundColor="#C4C4C4" textAlign="right"/>
+			<mx:AdvancedDataGridColumn headerText="備考" sortable="false" width="100" dataField="notes" itemRenderer="jp.co.ctc.components.BackgroundColorItemRenderer"/>
+		</mx:columns>
+	</mx:AdvancedDataGrid>
+
+	<s:HGroup width="100%" height="30" verticalAlign="middle" horizontalAlign="center">
+		<s:Button label="保存" height="30" id="btnSaveData" click="btnSaveData_clickHandler(event)"/>
+		<s:Button label="終了" height="30" id="btnExit" click="btnExit_clickHandler(event)"/>
+	</s:HGroup>
+</s:Application>

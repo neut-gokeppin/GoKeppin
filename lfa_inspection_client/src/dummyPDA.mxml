@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:mx="library://ns.adobe.com/flex/mx" minWidth="955" minHeight="600" height="268" width="311">
+	<s:layout>
+		<s:VerticalLayout horizontalAlign="justify"/>
+	</s:layout>
+
+	<fx:Script>
+		<![CDATA[
+			import mx.events.FlexEvent;
+			protected function button1_clickHandler(event:MouseEvent):void
+			{
+				var request:URLRequest = new URLRequest("../android?id=" + id1.text);
+				//var request:URLRequest = new URLRequest("../logistics?id=" + id1.text);
+				request.method = URLRequestMethod.POST;
+				request.data = body.text;
+				navigateToURL(request, "_self");
+			}
+
+			protected function body_creationCompleteHandler(event:FlexEvent):void
+			{
+				var s:String =
+					"<Table>\n" +
+					"<bodyNo>00016</bodyNo>\n" +
+					"<userCode>1234567</userCode>\n" +
+					"<dataTime>20120801</dataTime>\n" +
+					"<groupCode>220</groupCode>\n" +
+					"</Table>";
+
+
+//					var s:String =
+//						"<DATA>\n" +
+//						"<Datasource>\n" +
+//						"<Table>\n" +
+//						"<bodyNo>L0028</bodyNo>\n" +
+//						"<recvDay>20100927</recvDay>\n" +
+//						"<spsCode>14</spsCode>\n" +
+//						"<userCode>1234568</userCode>\n" +
+//						"</Table>\n" +
+//						"</Datasource>\n" +
+//						"<NewDataSet>\n" +
+//						"<Table>\n" +
+//						"<shelfResultFlg>0</shelfResultFlg>\n" +
+//						"<shelfResultTime>2010/11/30 14:26:44</shelfResultTime>\n" +
+//						"<partsResultFlg>0</partsResultFlg>\n" +
+//						"<partsResultTime>2010/11/30 14:26:49</partsResultTime>\n" +
+//						"<userCode>1234567</userCode>\n" +
+//						"<bodyNo>L0028</bodyNo>\n" +
+//						"<recvDay>20100927</recvDay>\n" +
+//						"<partsCode>902</partsCode>\n" +
+//						"<spsCode>14</spsCode>\n" +
+//						"<shelfQrcode>868607701000</shelfQrcode>\n" +
+//						"<partsQrcode>86860-77010-**</partsQrcode>\n" +
+//						"</Table>\n" +
+//						"</NewDataSet>\n" +
+//						"</DATA>";
+
+				body.text = s;
+			}
+
+		]]>
+	</fx:Script>
+
+	<fx:Declarations>
+		<!-- 非ビジュアルエレメント (サービス、値オブジェクトなど) をここに配置 -->
+	</fx:Declarations>
+	<mx:Form label="form1" dropShadowVisible="false" height="100%" width="100%">
+		<mx:FormItem label="ID" required="true" width="100%">
+			<s:TextInput text="group" width="100%" id="id1"/>
+		</mx:FormItem>
+		<mx:FormItem label="XML" required="true" width="100%">
+			<s:TextArea width="100%" id="body" creationComplete="body_creationCompleteHandler(event)"/>
+		</mx:FormItem>
+		<mx:FormItem horizontalAlign="center" width="80%">
+			<s:Button label="送信！" click="button1_clickHandler(event)"/>
+		</mx:FormItem>
+	</mx:Form>
+</s:Application>

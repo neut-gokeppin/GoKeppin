@@ -1,0 +1,912 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:mx="library://ns.adobe.com/flex/mx" pageTitle="LFA物流・組立 部品棚管理システム" creationComplete="application1_creationCompleteHandler(event)" xmlns:local="*" xmlns:components="jp.co.ctc.components.*">
+	<s:layout>
+		<s:VerticalLayout paddingLeft="8" paddingRight="8" paddingTop="8" paddingBottom="8" horizontalAlign="center" gap="8"/>
+	</s:layout>
+	<fx:Style source="lfa_inspection.css"/>
+	<fx:Script>
+		<![CDATA[
+			import jp.co.ctc.components.ImageButton;
+			import jp.co.ctc.components.ShowImageButton;
+			import jp.co.ctc.entity.LgMBcsignDTO;
+			import jp.co.ctc.entity.LgMSps;
+			import jp.co.ctc.util.Utils;
+
+			import mx.collections.IList;
+			import mx.controls.Alert;
+			import mx.controls.advancedDataGridClasses.AdvancedDataGridItemRenderer;
+			import mx.events.AdvancedDataGridEvent;
+			import mx.events.CloseEvent;
+			import mx.events.CollectionEvent;
+			import mx.events.CollectionEventKind;
+			import mx.events.FlexEvent;
+			import mx.events.ListEvent;
+			import mx.events.PropertyChangeEvent;
+			import mx.managers.CursorManager;
+			import mx.rpc.events.ResultEvent;
+
+
+
+			private var rmenu:ContextMenu;
+			private var rmenuitem1:ContextMenuItem;
+			private var rmenuitem2:ContextMenuItem;
+			private var rmenuIndex:int = -1;
+			private var rmenuItem:LgMBcsignDTO;
+			private var removedRows:ArrayCollection = new ArrayCollection();
+			private var TITLE:String = "指示マスタメンテナンス";
+
+			public var DdlList:ArrayCollection = new ArrayCollection();
+
+			// Debug用 ****************************************
+			// メニュー&ログイン画面から選択されたマスタ、従業員コードを取得するように修正する
+			// selectMstで画像登録ボタンの有効／無効を制御するため、Bindableタグをつける
+			[Bindable]
+			public var selectMst:int = 0;
+			public var loginUser:String = "";
+			// スペース削除用の正規パターン?
+			private var pattern:RegExp = /^[\u3000\s]+|[\u3000\s]+$/g;
+
+			// 保存時に、保存処理が完了したか判定するためのカウンタ
+			private var updateCnt:int;
+
+
+
+			/**
+			 * アプリケーション初期化
+			 * ・ログインユーザーの取得
+			 */
+			protected function application1_creationCompleteHandler(event:FlexEvent):void
+			{
+
+// テスト用 --->
+
+				// テスト時は　コメント部分と非コメント部分を入れ替える。 Kato
+
+				//ユーザーコードを取得
+				srvUser.getUserCode();
+/*
+				if (selectMst==1) {
+					// 本番マスタ選択時
+
+					selectMst_Label.text = "本番";
+					btnSaveData.enabled = false;
+
+					grid.editable = "false";
+
+				} else {
+					// 仮マスタ選択時
+
+					selectMst_Label.text = "仮";
+
+					// コンテキストメニューの作成
+					rmenu = new ContextMenu();
+					rmenu.hideBuiltInItems();
+					rmenu.addEventListener(ContextMenuEvent.MENU_SELECT, rmenu_menuSelectHandler);
+					rmenuitem1 = new ContextMenuItem("行を追加");
+					rmenuitem1.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, addRowHandler);
+					rmenu.customItems.push(rmenuitem1);
+					rmenuitem2 = new ContextMenuItem("行を削除");
+					rmenuitem2.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, removeRowHandler);
+					rmenu.customItems.push(rmenuitem2);
+
+					grid.editable = "true";
+				}
+				// グループ検索
+				srvSps.getLgMSpss(selectMst);
+*/
+// テスト用 <---
+
+
+				// Alertのボタンの幅を変更
+				// デフォルトの60だと"キャンセル"の文字が表示しきれない。
+				Alert.buttonWidth = 100;
+			}
+
+			/**
+			 * ユーザーコードの取得後の処理。
+			 * ユーザーコードを持っていなければログイン画面に戻します。
+			 */
+			protected function getUserCode_resultHandler(event:ResultEvent):void
+			{
+				//ユーザコードがなければログインページに戻す
+				if (event.result==null) {
+					var request:URLRequest = new URLRequest("lg_login.html");
+					navigateToURL(request, "_self");
+				}
+				else{
+					this.loginUser = event.result.toString();
+					//セレクトマスタを取得
+					srvUser.getSelectMst();
+				}
+			}
+
+			/**
+			 * セレクトマスタの取得後の処理。
+ 			 * ・コンテキストメニューの準備
+			 */
+			protected function getSelectMst_resultHandler(event:ResultEvent):void
+			{
+				selectMst = parseInt(event.result.toString());
+
+				if (selectMst==1) {
+					// 本番マスタ選択時
+
+					selectMst_Label.text = "本番";
+					btnSaveData.enabled = false;
+
+					grid.editable = "false";
+
+				} else {
+					// 仮マスタ選択時
+
+					selectMst_Label.text = "仮";
+
+					// コンテキストメニューの作成
+					rmenu = new ContextMenu();
+					rmenu.hideBuiltInItems();
+					rmenu.addEventListener(ContextMenuEvent.MENU_SELECT, rmenu_menuSelectHandler);
+					rmenuitem1 = new ContextMenuItem("行を追加");
+					rmenuitem1.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, addRowHandler);
+					rmenu.customItems.push(rmenuitem1);
+					rmenuitem2 = new ContextMenuItem("行を削除");
+					rmenuitem2.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, removeRowHandler);
+					rmenu.customItems.push(rmenuitem2);
+
+					grid.editable = "true";
+				}
+				// SPS台車検索
+				srvSps.getLgMSpss(selectMst);
+			}
+
+			/**
+			 * 右クリックメニュー表示時の処理。
+			 */
+			private function rmenu_menuSelectHandler(event:ContextMenuEvent):void {
+				// 右クリックされた行を保持しておく
+				if (-1 < rmenuIndex && rmenuIndex < acGrid.length) {
+					rmenuItem = acGrid.getItemAt(rmenuIndex) as LgMBcsignDTO;
+				} else {
+					rmenuItem = null;
+				}
+			}
+
+			/**
+			 * 行追加の処理。
+			 * 追加可能であるかチェックします。
+			 */
+			private function addRowHandler(event:ContextMenuEvent):void {
+				// 行選択チェック
+				if (rmenuItem == null) {
+					Alert.show("追加対象の行を右クリックしてください", TITLE);
+					return;
+				}
+
+				// 固定検査項目チェック
+				if (!rmenuItem.msgDiv) {
+					Alert.show("記号を使用しない部品には行を追加できません", TITLE);
+					return;
+				}
+
+				// 新しいMBcsignDTOオブジェクトを作成
+				var newDTO:LgMBcsignDTO = new LgMBcsignDTO();
+
+				//ソートした状態での新規追加に備えて加える
+				newDTO.msgNo = rmenuItem.msgNo;
+				newDTO.bcPosition = rmenuItem.bcPosition;
+				newDTO.bcLength = rmenuItem.bcLength;
+				newDTO.spsName = rmenuItem.spsName;
+				newDTO.spsOrder = rmenuItem.spsOrder;
+				newDTO.spsNo = rmenuItem.spsNo;
+				newDTO.partName = rmenuItem.partName;
+				//ここまで
+
+				newDTO.mstVer = rmenuItem.mstVer;
+				newDTO.partCode = rmenuItem.partCode;
+				newDTO.msgDiv = rmenuItem.msgDiv;
+				newDTO.insertUser = loginUser;
+				newDTO.editDiv = "I";
+				// 棚照合はチェック状態をdefaultとする
+				newDTO.checkFlag = true;
+
+				// 行を追加
+				var row:int = acGrid.getItemIndex(rmenuItem);
+				acGrid.addItemAt(newDTO, row + 1);
+			}
+
+			/**
+			 * 行削除の処理。
+			 * 削除可能であるかチェックします。
+			 */
+			private function removeRowHandler(event:ContextMenuEvent):void {
+				// 行選択チェック
+				if (rmenuItem == null) {
+					Alert.show("削除対象の行を右クリックしてください", TITLE);
+					return;
+				}
+
+				// 固定検査項目チェック
+				if (!rmenuItem.msgDiv) {
+					Alert.show("記号を使用しない部品の行は削除できません", TITLE);
+					return;
+				}
+
+				// 最後の行かどうかをチェック
+				var hasMoreRows:Boolean = false;
+				for each (var dto:LgMBcsignDTO in acGrid) {
+					if (dto != rmenuItem && dto.partCode == rmenuItem.partCode) {
+						hasMoreRows = true;
+						break;
+					}
+				}
+				// 最後の行でなければ削除する
+				if (hasMoreRows) {
+					var row:int = acGrid.getItemIndex(rmenuItem);
+					acGrid.removeItemAt(row);
+				} else {
+					Alert.show("部品に対して最後の行は削除できません", TITLE);
+					return;
+				}
+				//新規追加でなければ削除用Arrayに格納
+				if (rmenuItem.editDiv != "I"){
+					removedRows.addItem(rmenuItem);
+				}
+			}
+
+			/**
+			 * データ変更時の処理。
+			 */
+			protected function acGrid_collectionChangeHandler(event:CollectionEvent):void
+			{
+				switch(event.kind) {
+					case CollectionEventKind.RESET:
+						// 右クリックメニューをセット
+						grid.contextMenu = rmenu;
+						break;
+					case CollectionEventKind.ADD:
+						grid.selectedIndex = event.location;
+						break;
+					case CollectionEventKind.REMOVE:
+						//削除処理のメソッドでArrayに格納するように変更
+						//removedRows.addItem(event.items[0]);
+						break;
+					case CollectionEventKind.UPDATE:
+						var propEvent:PropertyChangeEvent = event.items[0] as PropertyChangeEvent;
+						// PropertyChangeEventでなければ何もしない
+						if (propEvent == null)
+						{
+							break;
+						}
+
+						if (propEvent.property != "editDiv"    &&
+							propEvent.property != "insertUser" &&
+							propEvent.property != "updateUser" )
+						{
+							var dto:LgMBcsignDTO = propEvent.currentTarget as LgMBcsignDTO;
+
+							//dtoがNullの時は以下の処理を飛ばす
+							if(dto == null)
+							{
+								break;
+							}
+
+							// 変更前後の値がnull⇒スペースの場合、何も変更していないとみなす
+							if (propEvent.oldValue == null && propEvent.newValue == " ")
+							{
+								break;
+							}
+
+							// 編集区分にU:変更をセット & 更新者にログインユーザーをセット
+							if (dto.signCode == 0)
+							{
+								dto.insertUser = loginUser;
+								dto.editDiv = "I";
+							}
+							else if (dto.editDiv != "I")
+							{
+								dto.updateUser = loginUser;
+								dto.editDiv = "U";
+							}
+						}
+						break;
+				}
+			}
+
+
+			/**
+			 * データが変更されているかチェックします。
+			 * @return true:変更有  false:変更無
+			 */
+			protected function updateExists():Boolean
+			{
+				var updExists:Boolean = false;
+				var item:LgMBcsignDTO;
+
+				for (var loop_cnt:int =0;loop_cnt < acGrid.length; loop_cnt++) {
+					item = acGrid[loop_cnt];
+					if (item.editDiv != null) {
+						updExists = true;
+						break;
+					}
+				}
+
+				if (removedRows.length > 0)
+				{
+					updExists = true;
+				}
+
+				return updExists;
+			}
+
+
+			/**
+			 * 検索ボタン押下時の処理。
+			 */
+			protected function btnGetData_clickHandler(event:MouseEvent):void
+			{
+				// 変更有無チェック
+				if (updateExists()) {
+					// 編集あり
+					Alert.show(
+						"変更が保存されていません。\n検索すると変更が破棄されます。よろしいですか？",
+						TITLE,
+						Alert.OK | Alert.CANCEL, this,
+						function(event:CloseEvent):void {
+							if (event.detail == Alert.OK) {
+								partDataGet();
+							}
+						}
+					);
+				}
+				else
+				{
+					partDataGet();
+				}
+			}
+
+
+			/**
+			 * 選択したグループ・selectMstに対応する
+			 * 指示項目を取得（removedRowsの初期化も同時に行う）
+			 */
+			protected function partDataGet():void {
+				var spsCode:int;
+
+				// グループドロップダウンリスト選択状態取得
+				if( ddlSps.selectedIndex==0 ){
+					// 項目検索条件 -> 全表示
+					srv.getLgMBcsignDTO(selectMst);
+				} else if  (ddlSps.selectedIndex==1) {
+					// 項目検索条件 -> グループなしのみ
+					srv.getLgMBcsignDTO(selectMst, 0);
+				} else {
+					// グループ選択
+					spsCode = (ddlSps.selectedItem as LgMSps).spsCode;
+					srv.getLgMBcsignDTO(selectMst, spsCode);
+				}
+				// removedRowsを初期化
+				removedRows = new ArrayCollection();
+			}
+
+			/**
+			 * 保存ボタン押下時の処理。
+			 */
+			protected function btnSaveData_clickHandler(event:MouseEvent):void
+			{
+				// 変更有無チェック
+				if (!updateExists())
+				{
+					// 編集なし
+					Alert.show("保存する内容がありません", TITLE);
+					return;
+				}
+
+				// 変数定義
+				var dto:LgMBcsignDTO;
+				var i:int;
+
+				//入力チェック
+				for(i = 0; i < acGrid.length; i++) {
+					dto = LgMBcsignDTO(acGrid.getItemAt(i));
+					if (dto.editDiv == null || !dto.editDiv.match("[IDU]")) continue;
+					// 記号空白チェック
+					var bcsign:String = dto.bcSign;
+					if (dto.msgDiv && (bcsign == null || bcsign.replace(pattern, "").length == 0)) {
+						Alert.show("記号を入力してください。", TITLE);
+						Utils.gridSelectRow(grid,i);
+						return;
+					}
+					//記号入力文字数チェック
+					if (dto.msgDiv && bcsign != null && bcsign.replace(pattern, "").length > 3) {
+						Alert.show("記号は３文字以下にしてください。", TITLE);
+						Utils.gridSelectRow(grid,i);
+						return;
+					}
+
+					// 仕入れ先　入力文字数チェック
+					var supplierName:String = acGrid.getItemAt(i).supplierName;
+					if (supplierName!=null && supplierName.length > 30) {
+						Alert.show("仕入先を30文字以下にしてください。", TITLE);
+						Utils.gridSelectRow(grid,i);
+						return;
+					}
+
+					// 背番号　入力文字数チェック
+					var backNo:String = acGrid.getItemAt(i).backNo;
+					if (backNo!=null && backNo.length > 5) {
+						Alert.show("背番号を5文字以下にしてください。", TITLE);
+						Utils.gridSelectRow(grid,i);
+						return;
+					}
+
+					// 品番　入力チェック
+					var sign:LgMBcsignDTO = acGrid.getItemAt(i) as LgMBcsignDTO
+					var partNo:String = sign.partNo;
+
+					// 品番の項目に入力があるか、取出が必要かつ棚照合を行う場合は品番の入力チェック実行
+					if (!Utils.isSpaceJ(partNo) || (!sign.notuseFlag && sign.checkFlag)) {
+
+						//空白チェック
+						if (Utils.isSpaceJ(partNo)){
+							Alert.show("品番が入力されていません", TITLE);
+							Utils.gridSelectRow(grid,i);
+							return;
+						}
+
+						// 品番が１４桁であるかチェック
+						// ([英数字or*の５桁]-[英数字or*の５桁[-[英数字or*の２桁])のフォーマットかチェック
+						if (partNo.length != 14 || partNo.match(/[*0-9a-zA-Z]{5}[-][*0-9a-zA-Z]{5}[-][*0-9a-zA-Z]{2}/g).length == 0){
+							Alert.show("品番が不正です", TITLE);
+							Utils.gridSelectRow(grid,i);
+							return;
+						}
+					}
+
+
+					// 識別　入力文字数チェック
+					var identName:String = acGrid.getItemAt(i).identName;
+					if (identName!=null && identName.length > 30) {
+						Alert.show("識別を30文字以下にしてください。", TITLE);
+						Utils.gridSelectRow(grid,i);
+						return;
+					}
+
+					var rackAddress:String = acGrid.getItemAt(i).rackAddress;
+
+					if ( rackAddress != null && rackAddress.replace(pattern,"").length >0) {
+
+						if (rackAddress.replace(pattern,"").length > 10) {
+							Alert.show("所番地は10桁以内です。", TITLE);
+							Utils.gridSelectRow(grid,i);
+							return;
+						}
+
+						// 先頭は英数字、2文字目以降は英数字or'-'  空白(全角・半角)を削除した状態でチェック
+						if(rackAddress.replace(pattern,"" ).match(/[0-9A-Za-z]+[0-9A-Za-z|\-]{1,}+$/)==null){
+							Alert.show("所番地が不正です。", TITLE);
+							Utils.gridSelectRow(grid,i);
+							return;
+						}
+
+						// 所番地を大文字に変換
+						acGrid.getItemAt(i).rackAddress = rackAddress.replace(pattern,"" ).toUpperCase();
+
+					}
+
+				}
+
+				//同一項目の重複チェック
+				if(!row_Sign_Check()){
+					Alert.show("同一項目内では同じ記号を使えません。", TITLE);
+					Utils.gridSelectRow(grid,i);
+					return;
+				}
+
+				// マウスカーソルを砂時計にして画面入力を禁止する
+				CursorManager.setBusyCursor();
+				this.enabled = false;
+
+				// 変更内容をデータベースに反映
+				updateCnt = 0;
+				for each (dto in acGrid)
+				{
+					// 変更が無ければ何もしない
+					if (dto.editDiv == null) {
+						continue;
+					}
+
+					// 処理数カウント
+					updateCnt++;
+
+					if (dto.fileReference != null)
+					{
+						// 画像読み込み後に起動するイベントを付ける
+						dto.fileReference.addEventListener(Event.COMPLETE, fileReference_completeHandler(dto));
+						// 画像読み込みを開始
+						dto.fileReference.load();
+					}
+					else
+					{
+						// 画像が添付されていない場合はそのまま更新
+						srv.update(dto);
+					}
+				}
+
+				// 削除処理
+				updateCnt++;
+				srv.remove(removedRows);
+			}
+
+			/**
+			 * 同一項目内の記号重複チェック。
+			 * ＜同じ項目内の記号をArrayに入れ、
+			 * Arrayをソートした後、前後を比べて重複チェックをしています。＞
+			 * @return false:重複がある　true:重複がない
+			 */
+			public function row_Sign_Check():Boolean
+			{
+				var upRowNo:int;
+				var downRowNo:int;
+				//項目内の記号重複チェック
+				for(var i:int=0;i<acGrid.length-1;i++)
+				{
+						//データグリッドのNoの項目を格納
+					downRowNo = (acGrid.getItemAt(i) as LgMBcsignDTO).partCode;
+
+						//Noが同じ（同一項目内）なら
+						if(upRowNo==downRowNo)
+						{
+							var ar:Array = new Array();
+
+							//同項目内の一番上の記号を格納
+							ar.push(acGrid.getItemAt(i-1).bcSign);
+
+							while(acGrid.getItemAt(i).partCode==downRowNo && i<acGrid.length-1)
+							{
+								ar.push(acGrid.getItemAt(i).bcSign);
+								i++;
+							}
+							ar.sort();
+
+							//ソートしたArrayの前後を比べる
+							for(var roop_count:int=0;roop_count<ar.length-1;roop_count++)
+							{
+								var downRowBcsign:String = ar[roop_count].toString().replace(pattern, "");
+								var upRowBcsign:String = ar[roop_count+1].toString().replace(pattern, "");
+
+								if(downRowBcsign==upRowBcsign)
+								{
+									Utils.gridSelectRow(grid,i);
+									return false;
+								}
+							}
+						}
+						//次の行と見比べるために変数に格納
+						upRowNo = downRowNo;
+				}
+				return true;
+			}
+
+			/**
+			 * ファイル読み込み完了時の処理。
+			 * 読み込んだファイルをサーバーにアップロードする
+			 * @param mBcsign 画像ファイルを持ったMBcsignDTOインスタンス
+			 * @return 読み込んだ画像をサーバーにアップロードします。
+			 */
+			protected function fileReference_completeHandler(mBcsign:LgMBcsignDTO):Function
+			{
+				return function(event:Event):void
+				{
+					// 読み込んだ画像をサーバーにアップロード
+					mBcsign.fileBody = FileReference(event.currentTarget).data;
+					srv.update(mBcsign);
+				}
+			}
+
+			/**
+			 * 保存・削除完了時の処理。
+			 */
+			protected function srv_update_resultHandler(event:ResultEvent):void
+			{
+				// 保存・削除が完了したかを判定する
+				updateCnt--;
+				if (updateCnt == 0) {
+					//--------------------------------
+					// 処理完了
+					//--------------------------------
+					// データベースから最新のデータを取得
+					partDataGet();
+					// マウスカーソルと画面を復帰する
+					this.enabled = true;
+					CursorManager.removeBusyCursor();
+					Alert.show("保存が完了しました。", TITLE);
+				}
+			}
+
+
+
+			/**
+			 * グリッド内のデータの表示。
+			 * 上の行とpartCodeが同じときは表示しない
+			 */
+			protected function grid_labelFunction(obj:Object, column:AdvancedDataGridColumn):String
+			{
+
+				var dto:LgMBcsignDTO = LgMBcsignDTO(obj);
+				var rowNum:int = acGrid.getItemIndex(dto);
+				var prevRow:LgMBcsignDTO;
+				if (rowNum > 0)
+				{
+					prevRow = acGrid.getItemAt(rowNum - 1) as LgMBcsignDTO;
+				}
+
+				if (rowNum <= 0 || dto.partCode != prevRow.partCode)
+				{
+					var label:String;
+					switch(column.headerText) {
+						case "No":
+							label = dto.partCode.toString();
+							break;
+						case "部品名":
+							label = dto.partName;
+							break;
+						case "Msg":
+							label = dto.msgDiv ? "■" : "□";
+							break;
+						case "MsgNo-桁目-桁数":
+							label = dto.msgDiv ? dto.msgNo + "-" + dto.bcPosition + "-" + dto.bcLength : "";
+							break;
+						case "SPS-取出順":
+							label = dto.spsName == null ? "" : dto.spsName + "-" + dto.spsOrder;
+							break;
+//						case "棚照合":
+//							label = dto.checkFlag ? "■" : "□";
+//							break;
+					}
+					return label;
+				}
+				else
+				{
+					return null;
+				}
+			}
+
+			/**
+			 * SPS-取出順のソート順を定義
+			 */
+			protected function grid_sps_sortCompareFunction(obj1:Object, obj2:Object):int {
+				var dto1:LgMBcsignDTO = LgMBcsignDTO(obj1);
+				var dto2:LgMBcsignDTO = LgMBcsignDTO(obj2);
+
+				// SPS台車がNULLのものは後ろに持っていく
+				if (dto1.spsNo != null && dto2.spsNo == null) {
+					return -1;
+				} else if (dto1.spsNo == null && dto2.spsNo != null) {
+					return 1;
+				}
+				// SPS台車Noの比較
+				if (dto1.spsNo < dto2.spsNo) {
+					return -1;
+				} else if (dto2.spsNo < dto1.spsNo) {
+					return 1;
+				}
+				// SPS台車内取出順の比較
+				if (dto1.spsOrder < dto2.spsOrder) {
+					return -1;
+				} else if (dto2.spsOrder < dto1.spsOrder) {
+					return 1;
+				}
+				// SPS台車が設定されていないものはpartCode順に表示する
+				if (dto1.partCode < dto2.partCode) {
+					return -1;
+				} else if (dto2.partCode < dto1.partCode) {
+					return 1;
+				}
+				//  指示記号の比較
+				if (dto1.bcSign < dto2.bcSign) {
+					return -1;
+				} else if (dto2.bcSign < dto1.bcSign) {
+					return 1;
+				}
+
+				return 0;
+			}
+
+
+			/**
+			 * グリッド内の項目の編集時の処理
+			 */
+			protected function grid_itemEditBeginHandler(event:AdvancedDataGridEvent):void
+			{
+				// 固定検査項目の記号欄は編集できない
+				if (event.columnIndex == 4 && !LgMBcsignDTO(event.itemRenderer.data).msgDiv)
+				{
+					event.preventDefault();
+				}
+			}
+
+
+			/**
+			 * 終了ボタン押下
+			 */
+			protected function btnExit_clickHandler(event:MouseEvent):void
+			{
+				var updExists:Boolean = false;
+				var item:LgMBcsignDTO;
+
+				// 本番マスタ選択時は確認不要
+				if (selectMst == 1) {
+					// Browserを閉じる
+					close();
+					return;
+				}
+
+				// 変更有無チェック
+				if (updateExists()) {
+					// 編集あり
+					Alert.show("変更が保存されていません。終了してもよろしいですか？",
+						TITLE,
+						Alert.OK | Alert.CANCEL, this,
+						function(event:CloseEvent):void {
+							if (event.detail == Alert.OK) {
+								close();
+								return;
+							}
+						}
+					);
+					return;
+				}
+
+				// メニュー画面に戻る
+				close();
+			}
+
+
+			/**
+			 * 画面の終了
+			 */
+			private function close():void
+			{
+				// マスタメンテナンスメニュー画面に遷移する
+				var request:URLRequest = new URLRequest("lg_master_menu.html");
+				navigateToURL(request, "_self");
+			}
+
+
+			/**
+			 * SPS台車検索後の処理
+			 */
+			protected function srvGroup_resultHandler(event:ResultEvent):void
+			{
+				var spsNotM:LgMSps = new LgMSps();
+				var spsAllM:LgMSps = new LgMSps();
+				var spsSpcM:LgMSps = new LgMSps();
+
+				ddlSps.dataProvider = srvSps.getLgMSpss.lastResult;
+				DdlList.removeAll();
+				DdlList.addAll(ddlSps.dataProvider);
+
+				spsNotM.spsName = "SPS台車なし";
+				spsAllM.spsName = "全て";
+
+				// 「全て」を選択状態にする
+				ddlSps.selectedIndex = 0;
+
+				acDdl.addItemAt( spsNotM, 0);
+				acDdl.addItemAt( spsAllM, 0);
+
+				spsSpcM.spsName = "";
+				DdlList.addItemAt( spsSpcM, 0);
+			}
+
+			/**
+			 * グリッド上のデータにマウスが乗ったときの処理
+			 */
+			protected function grid_itemRollOverHandler(event:ListEvent):void
+			{
+				// マウスカーソルの乗っている行を保持しておく。
+				// 右クリックで使用する
+				rmenuIndex = event.rowIndex;
+			}
+		]]>
+	</fx:Script>
+
+	<fx:Declarations>
+		<s:RemoteObject id="srv" destination="lgMBcsignService">
+			<s:method name="update" result="srv_update_resultHandler(event)" />
+			<s:method name="remove" result="srv_update_resultHandler(event)" />
+		</s:RemoteObject>
+
+		<s:RemoteObject id="srvUser" destination="lgMUserService">
+			<s:method name="getUserCode" result="getUserCode_resultHandler(event)"/>
+			<s:method name="getSelectMst" result="getSelectMst_resultHandler(event)"/>
+		</s:RemoteObject>
+
+		<s:RemoteObject id="srvSps" destination="lgMSpsService" result="srvGroup_resultHandler(event)"/>
+
+		<s:ArrayCollection id="acGrid" collectionChange="acGrid_collectionChangeHandler(event)" list="{srv.getLgMBcsignDTO.lastResult}" />
+		<s:ArrayCollection id="acDdl"  list="{ddlSps.dataProvider as IList}" />
+	</fx:Declarations>
+	<s:HGroup width="100%" height="24" verticalAlign="middle" fontFamily="ＭＳ ゴシック">
+		<s:Label text="指示記号マスタメンテナンス" fontSize="14" fontWeight="bold"/>
+	</s:HGroup>
+	<s:HGroup width="100%" height="24">
+		<s:HGroup width="50%" height="24" textAlign="left" verticalAlign="middle">
+			<s:Label text="SPS台車："/>
+			<s:DropDownList id="ddlSps" dataProvider="{srvSps.getLgMSpss.lastResult}" labelField="spsName"></s:DropDownList>
+			<s:Button label="検索" height="30" id="btnGetData" click="btnGetData_clickHandler(event)" fontSize="12"/>
+		</s:HGroup>
+		<s:HGroup width="50%" height="24"  fontFamily="ＭＳ ゴシック" horizontalAlign="right" verticalAlign="middle">
+			<s:Label text="マスタ選択" width="229" textAlign="right"/>
+			<s:Label text="仮" fontWeight="bold" id="selectMst_Label"/>
+		</s:HGroup>
+	</s:HGroup>
+
+	<mx:AdvancedDataGrid id="grid" designViewDataType="flat"  dataProvider="{srv.getLgMBcsignDTO.lastResult}" right="12" left="20" top="20" bottom="60"
+						 editable="true" width="100%" height="100%" sortExpertMode="true" itemEditBegin="grid_itemEditBeginHandler(event)"
+						 itemRollOver="grid_itemRollOverHandler(event)" draggableColumns="false">
+		<mx:columns>
+			<mx:AdvancedDataGridColumn id="No" headerText="No" dataField="itemNo" labelFunction="grid_labelFunction" editable="false" width="40" backgroundColor="#C4C4C4" textAlign="left" sortable="true" />
+			<mx:AdvancedDataGridColumn headerText="部品名" labelFunction="grid_labelFunction" editable="false" backgroundColor="#C4C4C4"  sortable="false"/>
+			<mx:AdvancedDataGridColumn headerText="Msg" labelFunction="grid_labelFunction" editable="false" width="35" textAlign="center" sortable="false" backgroundColor="#C4C4C4" />
+			<mx:AdvancedDataGridColumn headerText="MsgNo-桁目-桁数" labelFunction="grid_labelFunction" editable="false" backgroundColor="#C4C4C4" sortable="true" dataField="msgNo"/>
+			<mx:AdvancedDataGridColumn headerText="記号"   dataField="bcSign" imeMode="{IMEConversionMode.JAPANESE_KATAKANA_HALF}" width="40" sortable="false">
+				<mx:itemRenderer>
+					<fx:Component>
+						<mx:AdvancedDataGridItemRenderer dataChange="advanceddatagriditemrenderer1_dataChangeHandler(event)">
+							<fx:Script>
+								<![CDATA[
+									import mx.events.FlexEvent;
+									protected function advanceddatagriditemrenderer1_dataChangeHandler(event:FlexEvent):void
+									{
+										if (data != null && !data.msgDiv)
+										{
+											AdvancedDataGridItemRenderer(event.currentTarget).background = true;
+											AdvancedDataGridItemRenderer(event.currentTarget).backgroundColor = 0xC4C4C4;
+										}
+										else
+										{
+											AdvancedDataGridItemRenderer(event.currentTarget).background = false;
+										}
+									}
+								]]>
+							</fx:Script>
+						</mx:AdvancedDataGridItemRenderer>
+					</fx:Component>
+				</mx:itemRenderer>
+			</mx:AdvancedDataGridColumn>
+			<mx:AdvancedDataGridColumn headerText="仕入先" dataField="supplierName" sortable="false"
+									   itemRenderer="jp.co.ctc.components.BackgroundColorItemRenderer"
+									   imeMode="{IMEConversionMode.JAPANESE_HIRAGANA}"/>
+			<mx:AdvancedDataGridColumn headerText="背番号" dataField="backNo" sortable="false" width="45"
+									   itemRenderer="jp.co.ctc.components.BackgroundColorItemRenderer"
+									   imeMode="{IMEConversionMode.ALPHANUMERIC_HALF}"/>
+			<mx:AdvancedDataGridColumn headerText="品番" dataField="partNo" sortable="false"
+									   itemRenderer="jp.co.ctc.components.BackgroundColorItemRenderer"
+									   imeMode="{IMEConversionMode.ALPHANUMERIC_HALF}" width="90"/>
+			<mx:AdvancedDataGridColumn headerText="識別" dataField="identName" sortable="false"
+									   itemRenderer="jp.co.ctc.components.BackgroundColorItemRenderer"
+									   imeMode="{IMEConversionMode.JAPANESE_HIRAGANA}"/>
+			<mx:AdvancedDataGridColumn headerText="不要" dataField="notuseFlag" sortable="false"
+									   editable="false" width="40" itemRenderer="jp.co.ctc.components.CheckBox"/>
+			<mx:AdvancedDataGridColumn headerText="画像" editable="false" width="45"
+									   itemRenderer="jp.co.ctc.components.ImageButton" sortable="false"/>
+			<mx:AdvancedDataGridColumn editable="false" headerText="表示" sortable="false" width="45"
+									   itemRenderer="jp.co.ctc.components.ShowImageButton" />
+			<mx:AdvancedDataGridColumn backgroundColor="#C4C4C4" dataField="fileName" editable="false" sortable="false" visible="false"/>
+			<mx:AdvancedDataGridColumn headerText="棚照合" dataField="checkFlag" sortable="false"
+									   editable="false" width="45" itemRenderer="jp.co.ctc.components.CheckBox"/>
+			<mx:AdvancedDataGridColumn headerText="所番地" dataField="rackAddress" sortable="false"
+									   itemRenderer="jp.co.ctc.components.BackgroundColorItemRenderer"
+									   imeMode="{IMEConversionMode.ALPHANUMERIC_HALF}" width="65"/>
+			<mx:AdvancedDataGridColumn headerText="SPS-取出順" labelFunction="grid_labelFunction" sortCompareFunction="grid_sps_sortCompareFunction"
+									   editable="false" backgroundColor="#C4C4C4" width="70" sortable="true"/>
+		</mx:columns>
+	</mx:AdvancedDataGrid>
+
+	<s:HGroup width="100%" height="30" verticalAlign="middle" horizontalAlign="center" fontFamily="ＭＳ ゴシック">
+		<s:Button label="保存" height="30" id="btnSaveData" click="btnSaveData_clickHandler(event)"/>
+		<s:Button label="終了" height="30" id="btnExit" click="btnExit_clickHandler(event)"/>
+	</s:HGroup>
+</s:Application>

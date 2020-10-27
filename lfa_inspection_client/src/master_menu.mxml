@@ -1,0 +1,539 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:mx="library://ns.adobe.com/flex/mx"  width="600"
+			   pageTitle="誤欠品検出力向上ツール" creationComplete="application1_creationCompleteHandler(event)" height="800">
+	<s:layout>
+		<s:HorizontalLayout horizontalAlign="center" gap="8" paddingTop="24"/>
+	</s:layout>
+
+	<!-- 2016/02/24 DA ins start -->
+	<fx:Metadata>
+		[ResourceBundle("message")]
+		[ResourceBundle("resource")]
+	</fx:Metadata>
+	<!-- 2016/02/24 DA ins end -->
+
+	<fx:Script>
+		<![CDATA[
+			import jp.co.ctc.entity.MUser;
+			import jp.co.ctc.event.MstSelectEvent;
+			import jp.co.ctc.util.MUserUtils;
+
+			import mx.collections.IList;
+			import mx.controls.Alert;
+			import mx.events.FlexEvent;
+			import mx.managers.CursorManager;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+
+			import spark.events.IndexChangeEvent;
+
+			// 初期値として仮マスタを選択
+			// 値を変更したときにボタンの有効・無効を切り替えるため、Bindable
+			[Bindable]
+			private var selectMst:int;
+
+			private var TITLE:String = "マスタメンテナンスメニュー";
+
+			private var loginUser:String = null;
+
+			// 2016/02/24 DA ins start
+			private var user:MUser;
+			// 2016/02/24 DA ins end
+
+			// CSV出力／取込用
+			private var fileReference:FileReference;
+
+			/**
+			 * 画面起動時の処理。
+			 * ユーザーコードの取得
+			 */
+			protected function application1_creationCompleteHandler(event:FlexEvent):void
+			{
+				// Debug用 ****************************************
+				//　Debugログインさせ、ログインが行われたようにする。
+				//srvUser.login("CJ00900");
+
+				// Alertのボタンの幅を変更
+				// デフォルトの60だと"キャンセル"の文字が表示しきれない。
+				Alert.buttonWidth = 100;
+
+				//ユーザーコードの取得
+				srvUser.getUserCode();
+			}
+
+			/**
+			 * ユーザーコードの取得後の処理。
+			 * 保持していなければログインページに戻す
+			 */
+			protected function getUserCode_resultHandler(event:ResultEvent):void
+			{
+				//ユーザコードがなければログインページに戻す
+				if (event.result==null) {
+					var request:URLRequest = new URLRequest("login.html");
+					navigateToURL(request, "_self");
+				}
+				else{
+					loginUser = event.result.toString();
+					//セレクトマスタの取得
+					srvUser.getSelectMst();
+				}
+			}
+
+			/**
+			 * セレクトマスタ取得後の処理。
+			 * 本番or仮マスタのトグルボタンを押します。初期値は仮マスタに設定
+			 */
+			protected function getSelectMst_resultHandler(event:ResultEvent):void
+			{
+				//初めてこのページに遷移した時
+				if(event.result==null) {
+					selectMst = 0;
+				}
+				//戻ってきた時
+				else{
+					selectMst = parseInt(event.result.toString());
+				}
+
+				// 2016/02/24 DA ins start
+				setDdlSelect(ddlMst, this.selectMst);
+
+				// ドロップボックス幅を文字数により変更する
+				ddlMst.width = getDdlWidth(ddlMst);
+
+				//ログインしているユーザ情報を取得する
+				srvUser.getMUser(this.loginUser);
+				// 2016/02/24 DA ins end
+			}
+
+			// 2016/02/24 DA ins start
+			/**
+			 * ユーザ情報取得後の処理
+			 */
+			protected function getMUser_resultHandler(event:ResultEvent):void
+			{
+				this.user = event.result as MUser;
+				enabledComponent();
+			}
+			// 2016/02/24 DA ins end
+
+			/**
+			 * マスタ本番登録が完了した時の処理。
+			 */
+			protected function srvTempMstRegist_resultHandler(event:ResultEvent):void
+			{
+				if (event.result.toString() == "0") {
+					Alert.show("マスタの本番登録が完了しました。", TITLE);
+				} else {
+					Alert.show("マスタの本番登録ができませんでした。", TITLE);
+				}
+				// 操作を受け付けるようにする
+				CursorManager.removeBusyCursor();
+				vGroup.enabled = true;
+			}
+
+
+			/**
+			 * CSV出力ボタンの処理
+			 */
+			protected function btnExportCsv_clickHandler(event:MouseEvent):void
+			{
+				//遷移先の「selectMst」に値を渡す
+				var vars:URLVariables = new URLVariables();
+				vars.selectMst = selectMst;
+				vars.loginUser = loginUser;
+				vars.fromPage = "MasterMenu"
+				// CSV出力用URLの呼び出し
+				var request:URLRequest = new URLRequest("../csv/export");
+				request.data = vars;
+				navigateToURL(request);
+			}
+
+
+			/**
+			 * CSV取込ボタンの処理
+			 */
+			protected function btnImportCsv_clickHandler(event:MouseEvent):void
+			{
+				// 取り込み対象のファイルを選択する
+				fileReference = new FileReference();
+				fileReference.addEventListener(Event.SELECT, fileReference_selectHandler);
+				var fileFilter:FileFilter = new FileFilter("CSVファイル (*.csv)", "*.csv");
+				fileReference.browse([fileFilter]);
+			}
+
+			/**
+			 * ファイル選択時の処理
+			 */
+			protected function fileReference_selectHandler(event:Event):void
+			{
+				// 操作を受け付けないようにする
+				CursorManager.setBusyCursor();
+				this.enabled = false;
+
+				// ファイルの読み込みを開始する
+				fileReference.addEventListener(Event.COMPLETE, fileReference_completeHandler);
+				fileReference.load();
+			}
+
+
+			/**
+			 * ファイル読み込み完了時の処理
+			 */
+			protected function fileReference_completeHandler(event:Event):void
+			{
+				// サーバーにファイルを送信する
+				// 2016/02/24 DA upd start
+				srv.importCsv(this.selectMst, fileReference.data);
+				// 2016/02/24 DA upd end
+			}
+
+			/**
+			 * サーバーからCSV取込処理の結果が返ってきたあとの処理
+			 */
+			protected function srv_importCsv_resultHandler(event:ResultEvent):void
+			{
+				// 操作を受け付けるようにする
+				CursorManager.removeBusyCursor();
+				this.enabled = true;
+
+				// 2016/02/24 DA upd start
+				if (event.result.toString() == "0") {
+					// 完了メッセージ表示
+					Alert.show("CSV取込が完了しました",TITLE);
+				}
+				else {
+					// マスタの予約がされているので取込はできません。
+					Alert.show(resourceManager.getString('message','msg00020'), TITLE);
+				}
+				// 2016/02/24 DA upd end
+			}
+
+			/**
+			 * CSV取込が失敗したときの処理
+			 */
+			protected function srv_importCsv_faultHandler(event:FaultEvent):void
+			{
+				// 操作を受け付けるようにする
+				CursorManager.removeBusyCursor();
+				this.enabled = true;
+
+				// エラーメッセージ表示
+				Alert.show("選択されたファイルは取込出来ません。\n" +
+					"対象のファイルはCSV出力したファイルのみです。"
+					,TITLE);
+			}
+
+			/**
+			 * 検査項目マスタメンテボタン押下時の処理。
+			 * 検査項目マスタメンテ画面に遷移します。
+			 */
+			protected function btnItemMainte_clickHandler(event:MouseEvent):void
+			{
+				//セレクトマスタをセットしてページ遷移
+				srvUser.setSelectMst(selectMst);
+				var request:URLRequest = new URLRequest("item_mainte.html");
+				navigateToURL(request, "_self");
+			}
+
+			/**
+			 * 指示記号マスタメンテボタン押下時の処理。
+			 * 指示記号マスタメンテ画面に遷移します。
+			 */
+			protected function btnBcsignMainte_clickHandler(event:MouseEvent):void
+			{
+				srvUser.setSelectMst(selectMst);
+				var request:URLRequest = new URLRequest("bcsign_mainte.html");
+				navigateToURL(request, "_self");
+			}
+
+			/**
+			 * 検査順マスタメンテボタン押下時の処理。
+			 * 検査順マスタメンテ画面に遷移します。
+			 */
+			protected function btnItemOrderMainte_clickHandler(event:MouseEvent):void
+			{
+				srvUser.setSelectMst(selectMst);
+				var request:URLRequest = new URLRequest("itemorder_in_group.html");
+				navigateToURL(request, "_self");
+			}
+
+			/**
+			 * グループマスタメンテボタン押下時の処理。
+			 * グループマスタメンテ画面に遷移します。
+			 */
+			protected function btnGroupMainte_clickHandler(event:MouseEvent):void
+			{
+				srvUser.setSelectMst(selectMst);
+				var request:URLRequest = new URLRequest("group_mainte.html");
+				navigateToURL(request, "_self");
+			}
+
+			/**
+			 * 戻るボタン押下時の処理。
+			 * 機能選択画面に遷移します。
+			 */
+			protected function btnFanctionMenu_clickHandler(event:MouseEvent):void
+			{
+				srvUser.setSelectMst(selectMst);
+				var request:URLRequest = new URLRequest("function_menu.html");
+				navigateToURL(request, "_self");
+			}
+
+			/**
+			 * 仮マスタ本番登録ボタン押下時の処理。
+			 * 仮マスタテーブルのデータを本番マスタに登録します。
+			 */
+			protected function btnTempMstRegist_clickHandler(event:MouseEvent):void
+			{
+				// ITAGE JYO 2013-04-12 DEL 001 S
+				/*
+				Alert.show("仮マスタを本番マスタへ登録します。\nよろしいですか？",
+					TITLE,
+					Alert.OK | Alert.CANCEL, this,
+					function(event:CloseEvent):void {
+						if (event.detail == Alert.OK) {
+							// 操作を受け付けないようにする
+							CursorManager.setBusyCursor();
+							vGroup.enabled = false;
+
+							srvTempMstRegist.TempMstRegist();
+							return;
+						}
+					}
+				);
+				*/
+				// ITAGE JYO 2013-04-12 DEL 001 E
+
+				// ITAGE JYO 2013-04-12 ADD 002 S
+				//セレクトマスタをセットして「仮マスタ本番登録」ページ遷移
+				srvUser.setSelectMst(selectMst);
+				var request:URLRequest = new URLRequest("master_regist.html");
+				navigateToURL(request, "_self");
+				// ITAGE JYO 2013-04-12 ADD 002 E
+			}
+
+
+			/**
+			 * クロスチェックボタン押下時の処理。
+			 * クロスチェック画面に遷移します。
+			 */
+			protected function btnCrossCheck_clickHandler(event:MouseEvent):void
+			{
+				var request:URLRequest = new URLRequest("../crosscheck");
+				navigateToURL(request, "_self");
+			}
+
+
+			/**
+			 * ダミーチェック設定ボタン押下時の処理。
+			 * ダミーチェック設定画面に遷移します。
+			 */
+			protected function btnDummyBody_clickHandler(event:MouseEvent):void
+			{
+				srvUser.setSelectMst(selectMst);
+				var request:URLRequest = new URLRequest("dummy_body.html");
+				navigateToURL(request, "_self");
+			}
+
+
+			// 2016/02/24 DA del start
+			///**
+			// * 仮マスタトグルボタン選択時
+			// * 仮マスタの時は０を格納
+			// */
+			//protected function rbtTempo_clickHandler(event:MouseEvent):void
+			//{
+			//	this.selectMst = 0;
+			//}
+
+			///**
+			// * 本番マスタトグルボタン選択時
+			// * 本番マスタの時は１を格納
+			// */
+			//protected function rbtReal_clickHandler(event:MouseEvent):void
+    			//{
+			//	this.selectMst = 1;
+			//}
+			// 2016/02/24 DA del end
+
+			// 2016/02/24 DA ins start
+			/**
+			 * マスタ選択
+			 */
+			protected function ddlMst_changeHandler(event:IndexChangeEvent):void
+			{
+				this.selectMst = MstSelectEvent.getMasterCode(ddlMst.selectedItem);
+				enabledComponent();
+			}
+
+			/**
+			 * コンポーネントの制御をする
+			 */
+			private function enabledComponent():void
+			{
+				var isReal:Boolean = MstSelectEvent.isReal(ddlMst.selectedItem);
+
+				if (MUserUtils.isAdministrator(this.user)) {
+					// マスタ管理者
+					btnItemMainte.enabled = true;
+					btnBcsignMainte.enabled = true;
+					btnItemOrderMainte.enabled = true;
+					btnGroupMainte.enabled = true;
+					btnCrossCheck.enabled = true;
+					btnExportCsv.enabled = true;
+					btnFanctionMain.enabled = true;
+					if (isReal) {
+						btnTempMstRegist.enabled = false;
+						btnImportCsv.enabled = false;
+						btnDummyBody.enabled = true;
+					}
+					else {
+						btnTempMstRegist.enabled = true;
+						btnImportCsv.enabled = true;
+						btnDummyBody.enabled = false;
+					}
+				}
+				else if (MUserUtils.OfficeOrganization(this.user)) {
+					// 検査職制本番可
+					btnItemMainte.enabled = true;
+					btnBcsignMainte.enabled = true;
+					btnItemOrderMainte.enabled = true;
+					btnGroupMainte.enabled = true;
+					btnCrossCheck.enabled = true;
+					btnExportCsv.enabled = true;
+					btnImportCsv.enabled = false;
+					btnFanctionMain.enabled = true;
+					if (isReal) {
+						btnTempMstRegist.enabled = false;
+						btnDummyBody.enabled = true;
+					}
+					else {
+						btnTempMstRegist.enabled = true;
+						btnDummyBody.enabled = false;
+					}
+				}
+				else if (MUserUtils.OfficeOrganizationNot(this.user)) {
+					// 検査職制本番不可
+					btnItemMainte.enabled = true;
+					btnBcsignMainte.enabled = true;
+					btnItemOrderMainte.enabled = true;
+					btnGroupMainte.enabled = true;
+					btnTempMstRegist.enabled = false;
+					btnCrossCheck.enabled = true;
+					btnExportCsv.enabled = true;
+					btnImportCsv.enabled = false;
+					btnFanctionMain.enabled = true;
+					if (isReal) {
+						btnDummyBody.enabled = true;
+					}
+					else {
+						btnDummyBody.enabled = false;
+					}
+				}
+				else if (MUserUtils.isExaminer(this.user)) {
+					// 検査員
+					btnItemMainte.enabled = false;
+					btnBcsignMainte.enabled = false;
+					btnItemOrderMainte.enabled = false;
+					btnGroupMainte.enabled = false;
+					btnTempMstRegist.enabled = false;
+					btnCrossCheck.enabled = false;
+					btnExportCsv.enabled = false;
+					btnImportCsv.enabled = false;
+					btnDummyBody.enabled = false;
+					btnFanctionMain.enabled = false;
+				}
+				else {
+					// 以外
+					btnItemMainte.enabled = false;
+					btnBcsignMainte.enabled = false;
+					btnItemOrderMainte.enabled = false;
+					btnGroupMainte.enabled = false;
+					btnTempMstRegist.enabled = false;
+					btnCrossCheck.enabled = false;
+					btnExportCsv.enabled = false;
+					btnImportCsv.enabled = false;
+					btnDummyBody.enabled = false;
+					btnFanctionMain.enabled = false;
+				}
+			}
+
+			/**
+			 * ドロップボックスを選択する
+			 */
+			private function setDdlSelect(ddl:DropDownList, code:int):void
+			{
+				var mstTemp:String = MstSelectEvent.getMasterName(code);
+				var list:IList = ddl.dataProvider;
+				var index:int = -1;
+				for (var i:int = 0; i < list.length; i++) {
+					if (list[i] == mstTemp) {
+						index = i;
+					}
+				}
+				ddl.selectedIndex = index;
+			}
+
+			/**
+			 * ドロップボックス幅を文字数により求める
+			 */
+			private function getDdlWidth(ddl:DropDownList):int
+			{
+				var list:IList = ddl.dataProvider;
+				var maxLen:int = 0;
+				for (var i:int = 0; i < list.length; i++) {
+					var len:int = list[i].toString().length;
+					if (len > maxLen) {
+						maxLen = len;
+					}
+				}
+				return 80 + 16 * maxLen;
+			}
+			// 2016/02/24 DA ins end
+		]]>
+	</fx:Script>
+
+	<fx:Declarations>
+		<!-- 非ビジュアルエレメント (サービス、値オブジェクトなど) をここに配置 -->
+		<s:RemoteObject id="srv" destination="csvService">
+			<s:method name="importCsv" result="srv_importCsv_resultHandler(event)" fault="srv_importCsv_faultHandler(event)" />
+		</s:RemoteObject>
+
+		<s:RemoteObject id="srvUser" destination="MUserService">
+			<s:method name="getUserCode" result="getUserCode_resultHandler(event)"/>
+			<s:method name="getMUser" result="getMUser_resultHandler(event)"/>
+			<s:method name="getSelectMst" result="getSelectMst_resultHandler(event)"/>
+		</s:RemoteObject>
+
+		<s:RemoteObject id="srvTempMstRegist" destination="storedFunctionService" result="srvTempMstRegist_resultHandler(event)" />
+	</fx:Declarations>
+	<s:VGroup id="vGroup" width="100%" verticalAlign="top" horizontalAlign="center" gap="20">
+		<s:HGroup width="100%" horizontalAlign="left" height="24">
+			<s:Label text="マスタメンテナンスメニュー" fontFamily="ＭＳ ゴシック" fontSize="24" fontWeight="bold"/>
+		</s:HGroup>
+
+		<!-- 2016/02/24 DA upd start -->
+		<s:DropDownList id="ddlMst" dataProvider="{MstSelectEvent.getMasterList()}" change="ddlMst_changeHandler(event)" fontFamily="ＭＳ ゴシック" fontSize="20" tabIndex="0" />
+		<!--
+		<s:HGroup width="100%" horizontalAlign="center" height="24">
+			<s:RadioButton id="rbtTempo" label="仮マスタ" selected="{selectMst == 0}" skinClass="spark.skins.spark.ToggleButtonSkin" groupName="AA" height="30" width="100" fontFamily="ＭＳ ゴシック" fontSize="16" click="rbtTempo_clickHandler(event)" tabIndex="1"/>
+			<s:RadioButton id="rbtReal" label="本番マスタ" selected="{selectMst != 0}" skinClass="spark.skins.spark.ToggleButtonSkin" groupName="AA" height="30" width="100" fontFamily="ＭＳ ゴシック" fontSize="16" click="rbtReal_clickHandler(event)" tabIndex="2"/>
+		</s:HGroup>
+		-->
+		<!-- 2016/02/24 DA upd end -->
+
+		<s:Button label="検査項目マスタメンテナンス" fontSize="18" fontFamily="ＭＳ ゴシック" width="360" height="45" id="btnItemMainte" click="btnItemMainte_clickHandler(event)" tabIndex="3"/>
+		<s:Button label="指示マスタメンテナンス" fontSize="18" fontFamily="ＭＳ ゴシック" width="360" height="45" id="btnBcsignMainte" click="btnBcsignMainte_clickHandler(event)" tabIndex="4"/>
+		<s:Button label="検査順マスタメンテナンス" fontSize="18" fontFamily="ＭＳ ゴシック" width="360" height="45" id="btnItemOrderMainte" click="btnItemOrderMainte_clickHandler(event)" tabIndex="5"/>
+		<s:Button label="工程マスタメンテナンス" fontSize="18" fontFamily="ＭＳ ゴシック" width="360" height="45" id="btnGroupMainte" click="btnGroupMainte_clickHandler(event)" tabIndex="6"/>
+		<s:Button label="仮マスタ本番登録" fontSize="18" fontFamily="ＭＳ ゴシック" width="360" height="45" id="btnTempMstRegist" click="btnTempMstRegist_clickHandler(event)" tabIndex="7"/>
+		<s:Button label="クロスチェック" fontSize="18" fontFamily="ＭＳ ゴシック" width="360" height="45" id="btnCrossCheck" tabIndex="8" click="btnCrossCheck_clickHandler(event)"/>
+		<s:Button label="CSV出力" fontSize="18" fontFamily="ＭＳ ゴシック" width="360" height="45" id="btnExportCsv" click="btnExportCsv_clickHandler(event)" tabIndex="9"/>
+		<s:Button label="CSV取込" fontSize="18" fontFamily="ＭＳ ゴシック" width="360" height="45" id="btnImportCsv" click="btnImportCsv_clickHandler(event)" tabIndex="10"/>
+		<s:Button label="ダミーチェック設定" fontSize="18" fontFamily="ＭＳ ゴシック" width="360" height="45" id="btnDummyBody" click="btnDummyBody_clickHandler(event)" tabIndex="11"/>
+		<s:Button label="戻る" fontSize="18" fontFamily="ＭＳ ゴシック" width="360" height="45" id="btnFanctionMain" click="btnFanctionMenu_clickHandler(event)" tabIndex="12"/>
+	</s:VGroup>
+
+</s:Application>

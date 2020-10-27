@@ -1,0 +1,650 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:mx="library://ns.adobe.com/flex/mx" pageTitle="LFA物流・組立 部品棚管理システム"
+			   creationComplete="application1_creationCompleteHandler(event)" minWidth="820">
+	<s:layout>
+		<s:VerticalLayout paddingLeft="8" paddingRight="8" paddingTop="8" paddingBottom="8" horizontalAlign="center" gap="8"/>
+	</s:layout>
+
+	<fx:Style source="lfa_inspection.css"/>
+	<fx:Script>
+		<![CDATA[
+			import jp.co.ctc.components.InputRowDialog;
+			import jp.co.ctc.entity.LgMOrder;
+			import jp.co.ctc.entity.LgMSps;
+
+			import mx.collections.ICollectionView;
+			import mx.collections.IList;
+			import mx.controls.Alert;
+			import mx.controls.advancedDataGridClasses.AdvancedDataGridItemRenderer;
+			import mx.core.FlexGlobals;
+			import mx.events.AdvancedDataGridEvent;
+			import mx.events.CloseEvent;
+			import mx.events.CollectionEvent;
+			import mx.events.CollectionEventKind;
+			import mx.events.DragEvent;
+			import mx.events.FlexEvent;
+			import mx.events.ListEvent;
+			import mx.events.PropertyChangeEvent;
+			import mx.managers.DragManager;
+			import mx.managers.PopUpManager;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+
+			private var rmenu:ContextMenu;
+			private var rmenuitem1:ContextMenuItem;
+			private var removedRows:ArrayCollection = new ArrayCollection();
+
+			private var updExists:Boolean = false;
+
+			private var timer:Timer;
+			private var iList:IList;
+			private var idx:int;
+			private var dir:int;
+			private var gridTarget:AdvancedDataGrid;
+
+			private var oldList:Array;
+			private var moveItems:Array;
+			private var rmenuIndex:int = -1;
+
+			// Debug用 ****************************************
+			// メニュー&ログイン画面から選択されたマスタ、従業員コードを取得するように修正する
+			private var selectMst:int = 0;
+			private var loginUser:String = "CJ00971";
+			private var TITLE:String = "取出順マスタメンテナンス";
+
+
+			protected function application1_creationCompleteHandler(event:FlexEvent):void
+			{
+
+				// テスト用 --->
+				timer = new Timer(300);
+				timer.addEventListener(TimerEvent.TIMER,onTimerTick);
+				idx = 0;
+				dir = 0;
+				// テスト時は　コメント部分と非コメント部分を入れ替える。 Kato
+				//ユーザーコードを取得
+				srvUser.getUserCode();
+				/*
+				if (selectMst==1) {
+
+					selectMst_Label.text = "本番";
+					btnSaveData.enabled = false;
+					grid.editable = "false";
+					grid.dropEnabled=false ;
+				} else {
+
+					selectMst_Label.text = "仮";
+					btnSaveData.enabled = true;
+					grid.editable = "true";
+					grid.dropEnabled=true ;
+				}
+				// SPS台車マスタの取得
+				srv.getLgMSpss(selectMst);
+
+				// コンテキストメニューの作成
+				rmenu = new ContextMenu();
+				rmenu.hideBuiltInItems();
+				rmenu.addEventListener(ContextMenuEvent.MENU_SELECT, rmenu_menuSelectHandler);
+				rmenuitem1 = new ContextMenuItem("挿入先を指定");
+				rmenuitem1.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, showDialogHandler);
+				rmenu.customItems.push(rmenuitem1);
+*/
+				// テスト用 <---
+
+
+				// Alertのボタンの幅を変更
+				// デフォルトの60だと"キャンセル"の文字が表示しきれない。
+				Alert.buttonWidth = 100;
+
+			}
+
+			/**
+			 * ユーザーコードの取得後の処理。
+			 * ログインチェックも兼ねる。
+			 */
+			protected function getUserCode_resultHandler(event:ResultEvent):void
+			{
+				//ユーザコードがなければログインページに戻す
+				if (event.result==null) {
+					var request:URLRequest = new URLRequest("lg_login.html");
+					navigateToURL(request, "_self");
+				}
+				else{
+					this.loginUser = event.result.toString();
+					//セレクトマスタを取得
+					srvUser.getSelectMst();
+				}
+			}
+
+			/**
+			 * セレクトマスタの取得後の処理
+			 */
+			protected function getSelectMst_resultHandler(event:ResultEvent):void
+			{
+				selectMst = parseInt(event.result.toString());
+
+				if (selectMst==1) {
+
+					selectMst_Label.text = "本番";
+					btnSaveData.enabled = false;
+					grid.editable = "false";
+					grid.dropEnabled=false ;
+				} else {
+
+					selectMst_Label.text = "仮";
+					btnSaveData.enabled = true;
+					grid.editable = "true";
+					grid.dropEnabled=true ;
+
+					// コンテキストメニューの作成
+					rmenu = new ContextMenu();
+					rmenu.hideBuiltInItems();
+					rmenu.addEventListener(ContextMenuEvent.MENU_SELECT, rmenu_menuSelectHandler);
+					rmenuitem1 = new ContextMenuItem("挿入先を指定");
+					rmenuitem1.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, showDialogHandler);
+					rmenu.customItems.push(rmenuitem1);
+
+				}
+
+
+				// グループマスタの取得
+				srv.getLgMSpss(selectMst);
+			}
+
+			/**
+			 * 右クリックメニュー表示時の処理
+			 */
+			private function rmenu_menuSelectHandler(event:ContextMenuEvent):void {
+				// 右クリックされた行を保持しておく
+				if (-1 < rmenuIndex && rmenuIndex < acO.length) {
+					moveItems = new Array();
+					moveItems.push(acO.getItemAt(rmenuIndex) as LgMOrder);
+				} else {
+					moveItems = null;
+				}
+			}
+
+			/**
+			 * 「挿入先を指定」選択時の処理
+			 */
+			private function showDialogHandler(event:ContextMenuEvent):void {
+				// 行選択チェック
+				if (moveItems == null) {
+					Alert.show("挿入先を指定したい行を右クリックしてください", TITLE);
+					return;
+				}
+				var moveItem:LgMOrder = moveItems[0];
+				//入力用ダイアログの表示
+				var dialog:InputRowDialog = PopUpManager.createPopUp(this,InputRowDialog,true) as InputRowDialog;
+				dialog.addEventListener(CloseEvent.CLOSE,closeWindow);
+				dialog.setItemname(moveItem.mPart.partName);
+				PopUpManager.centerPopUp(dialog);
+				dialog.input.setFocus();
+			}
+
+			/**
+			 * 入力ウィンドウが閉じられたときのイベント処理
+			 */
+			public function closeWindow(e:CloseEvent):void{
+				if (e.detail == 1) {
+					//OKが押下された場合だけ処理する。
+					var inOrder:int = int(e.target.getOrder());
+					if (inOrder > 0) {
+						//入力された値が正の数の場合だけ入れ替え処理を行う。
+
+						//現在の状態を保存
+						oldList = acO.toArray();
+						var moveItem:LgMOrder = moveItems[0];
+
+						//選択した項目を一度削除する。
+						var idx:int = acO.getItemIndex(moveItem);
+						acO.removeItemAt(idx);
+
+						//挿入先を求める
+						var orderCnt:int = 1;
+						for (idx = 0; idx < acO.length; idx++) {
+							var listItem:LgMOrder = acO.getItemAt(idx) as LgMOrder;
+							if (listItem.takeOrder != 0) {
+								//取り出し順が０のものは考慮しない
+								if (orderCnt == inOrder) {
+									//現在の順番と指定された順番が等しければループを抜ける
+									break;
+								}
+								//現在の順番を加算
+								orderCnt++;
+							}
+						}
+						if (idx < acO.length) {
+							acO.addItemAt(moveItem,idx);
+						} else {
+							acO.addItem(moveItem);
+						}
+
+					} else {
+						Alert.show("値は1以上の整数で入力してください", TITLE);
+					}
+				}
+			}
+			/**
+			 * グリッド上のデータにマウスが乗ったときの処理。
+			 */
+			protected function grid_itemRollOverHandler(event:ListEvent):void
+			{
+				// マウスカーソルの乗っている行を保持しておく。
+				// 右クリックで使用する
+				rmenuIndex = event.rowIndex;
+			}
+			//*************************************************************
+			// SPS Combo Event
+			//*************************************************************
+
+			/**
+			 * Data取得Error Event (MGroup or TGroup)
+			 */
+			private function onSpsFault(e:FaultEvent):void
+			{
+				Alert.show("SPS台車マスタの取得に失敗しました。",TITLE);
+			}
+
+			//*************************************************************
+			// 取出順Grid Event
+			//*************************************************************
+			/**
+			 * 取出順データ更新成功時の処理。
+			 */
+			private function onOrderResult(e:ResultEvent):void
+			{
+				Alert.show("保存しました。",TITLE);
+			}
+
+
+			/**
+			 * Data取得Error Event
+			 */
+			private function onOrderGetFault(e:FaultEvent):void
+			{
+				Alert.show("データ取得に失敗しました。",TITLE);
+			}
+
+			/**
+			 * 取出順データ更新失敗時の処理。
+			 */
+			private function onOrderSaveFault(e:FaultEvent):void
+			{
+				Alert.show("データの更新に失敗しました。",TITLE);
+			}
+
+			//*************************************************************
+			// ボタン Event
+			//*************************************************************
+
+			/**
+			 * 検索ボタン押下時の処理。
+			 */
+			protected function btnGetData_clickHandler(event:MouseEvent):void
+			{
+				var sps:LgMSps;
+
+				if(spsList.selectedItem==null){
+					Alert.show("SPS台車を選択してください",TITLE);
+					return;
+				}
+
+
+				if(updExists==true){
+					Alert.show("変更せずに検索すると変更内容を破棄します。\nよろしいですか？",TITLE,
+						Alert.OK | Alert.CANCEL, this,
+						function(event:CloseEvent):void {
+							if (event.detail == Alert.OK) {
+								sps = ac[spsList.selectedIndex];
+								orderSrv.getLgMOrders(selectMst, sps.spsCode);
+								// 変更をクリア
+								updExists=false;
+							}
+						}
+					);
+				} else {
+					sps = ac[spsList.selectedIndex];
+					orderSrv.getLgMOrders(selectMst, sps.spsCode);
+					// 変更をクリア
+					updExists=false;
+				}
+			}
+
+			/**
+			 * 保存ボタン押下時の処理。
+			 */
+			protected function btnSaveData_clickHandler(event:MouseEvent):void
+			{
+				var sps:LgMSps;
+
+				// SPS台車が選ばれていない or 変更データがない時
+				if (spsList.selectedIndex==-1 || updExists==false) {
+					Alert.show("変更する内容がありません。",
+						TITLE);
+
+					return;
+				}
+
+				sps = ac[spsList.selectedIndex] as LgMSps;
+
+				orderSrv.updateAll(sps.spsCode, acO,loginUser);
+
+				// 変更をクリア
+				updExists=false;
+			}
+
+			/**
+			 * 終了ボタン押下時の処理。
+			 */
+			private function btnExit_clickHandler(event:MouseEvent):void{
+
+				// 本番マスタ選択時は確認不要
+				if (selectMst == 1) {
+					// Browserを閉じる
+					close();
+					return;
+				}
+
+				if (updExists==true) {
+					// 編集あり
+					Alert.show("変更が保存されていません。終了してもよろしいですか？",
+						TITLE,
+						Alert.OK | Alert.CANCEL, this,
+						function(event:CloseEvent):void {
+							if (event.detail == Alert.OK) {
+								// Browserを閉じる
+								close();
+							}
+						}
+					);
+					return;
+				}
+
+				// メニュー画面に戻る
+				close();
+			}
+
+
+			/**
+			 * 表示された画面を閉じ、ページ遷移を行います。
+			 */
+			private function close():void
+			{
+				// マスタメンテナンスメニュー画面に遷移する
+				var request:URLRequest = new URLRequest("lg_master_menu.html");
+				navigateToURL(request, "_self");
+			}
+
+
+			//*************************************************************
+			// Grid表示データ取得
+			//*************************************************************
+
+			/**
+			 * DataGridの部品名カラムに値をバインドする
+			 */
+			private function partNameColumnFunction(item:Object, column:AdvancedDataGridColumn):String {
+				return item.mPart.partName;
+			}
+
+			/**
+			 * DataGridの部品No.カラムに値をバインドする
+			 */
+			private function partCodeColumnFunction(item:Object, column:AdvancedDataGridColumn):String {
+				return item.mPart.partCode;
+			}
+
+			/**
+			 * DataGridの所番地カラムに値をバインドする
+			 */
+			private function rackAddressColumnFunction(item:Object, column:AdvancedDataGridColumn):String {
+				return item.mPart.rackAddress;
+			}
+
+			//*************************************************************
+			// 取出順の採番
+			//*************************************************************
+
+			/**
+			 *  取出順データが更新された時の処理です。
+			 *  (グリッドの値が変更されたとき)
+			 */
+			protected function acO_collectionChangeHandler(event:CollectionEvent):void
+			{
+				switch(event.kind) {
+					case CollectionEventKind.RESET:
+						// 右クリックメニューをセット
+						grid.contextMenu = rmenu;
+						break;
+					case CollectionEventKind.ADD:
+						// 取出順の採番
+						renumTakeNo(acO);
+						// データ更新あり
+						updExists = true;
+						break;
+					case CollectionEventKind.REMOVE:
+						// 検査順の採番
+						//renumTakeNo(acO);
+						// データ更新あり
+						//updExists = true;
+						break;
+				}
+			}
+
+
+			/**
+			 * 取出順をグリッドの先頭から順に割り振ります。
+			 */
+			private function renumTakeNo(ac:IList):void {
+				/*
+				var mOrder:LgMOrder;
+
+				for (var loop_cnt:int =1;loop_cnt <= ac.length; loop_cnt++) {
+					mOrder = acO[loop_cnt-1];
+					mOrder.takeOrder = loop_cnt;
+					mOrder.updateUser = loginUser;
+				}
+				*/
+
+				/*
+				var mOrder:LgMOrder;
+				var oldOrder:LgMOrder;
+				var startIdx:int = -1;
+				var setOrder:int = 0;
+
+				do {
+					startIdx++;
+					if (startIdx >= acO.length) {
+						break;
+					}
+					mOrder = acO[startIdx];
+					oldOrder = oldList[startIdx];
+					if (mOrder.takeOrder != 0 || mOrder.partCode != oldOrder.partCode) {
+						setOrder++;
+						break;
+					}
+				} while (true)
+
+				for (var loop_cnt:int = startIdx; loop_cnt < ac.length; loop_cnt++) {
+					mOrder = acO[loop_cnt];
+					mOrder.takeOrder = setOrder;
+					mOrder.updateUser = loginUser;
+					setOrder++;
+				}
+				*/
+
+				var mOrder:LgMOrder;
+				var setOrder:int = 1;
+
+				for (var loop_cnt:int =0;loop_cnt < ac.length; loop_cnt++) {
+					mOrder = acO[loop_cnt];
+					if (mOrder.takeOrder != 0 || checkMoveCode(mOrder.partCode)) {
+						mOrder.takeOrder = setOrder;
+						mOrder.updateUser = loginUser;
+						setOrder++;
+					}
+				}
+
+			}
+
+			private function checkMoveCode(partCode:int):Boolean {
+				for (var idx:int = 0; idx < moveItems.length; idx++) {
+					var item:LgMOrder = moveItems[idx];
+					if (partCode == item.partCode) {
+						return true;
+					}
+				}
+				return false;
+			}
+
+			/**
+			 * ドラッグを開始したときの処理
+			 */
+			protected function grid_dragStartHandler(event:DragEvent):void
+			{
+
+				///並べ替え前の順序を保持しておく。
+				oldList = acO.toArray();
+				gridTarget = event.currentTarget as AdvancedDataGrid;
+				moveItems = gridTarget.selectedItems;
+
+			}
+			/**
+			 * ドラッグ＆ドロップ時が実行された時の処理です。
+			 *  ctrlキーが押されていた場合は処理を無効化します。
+			 */
+			protected function grid_dragDropHandler(event:DragEvent):void
+			{
+				//コントロールキーが押されていたら処理をキャンセルする
+				if(event.ctrlKey){
+					event.preventDefault();
+				}
+			}
+
+			/**
+			 * コンポーネント外へドラッグしたときの処理
+			 */
+			protected function grid_dragExitHandler(event:DragEvent):void
+			{
+				//スクロール処理用の情報を設定し、タイマーをスタートさせる。
+				gridTarget = event.currentTarget as AdvancedDataGrid;
+				iList = gridTarget.dataProvider as IList;
+				idx = iList.getItemIndex(gridTarget.firstVisibleItem);
+				if (event.localY < 0) {
+					dir = -1;
+				}
+				if (event.localY > gridTarget.height) {
+					dir = 1;
+				}
+				timer.start();
+			}
+
+			/**
+			 * コンポーネント内へドラッグしたときの処理
+			 */
+			protected function grid_dragEnterHandler(event:DragEvent):void
+			{
+				//タイマーを停止させる。
+				if (timer.running) {
+					timer.stop();
+					dir = 0;
+				}
+			}
+
+			/**
+			 * ドラッグ＆ドロップが完了したときの処理
+			 */
+			protected function grid_dragCompleteHandler(event:DragEvent):void
+			{
+				//タイマーを停止させる。
+				if (timer.running) {
+					timer.stop();
+					dir = 0;
+				}
+			}
+			/**
+			 * タイマーイベント
+			 *
+			 */
+			protected function onTimerTick(event:TimerEvent):void
+			{
+				//リストを1行、指定された方向へスクロールする。
+				idx = idx + dir;
+				if (idx >= 0 && idx < iList.length) {
+					gridTarget.firstVisibleItem = iList.getItemAt(idx);
+				} else {
+					idx = idx - dir;
+				}
+			}
+			/**
+			 * DataGridの項目への編集開始イベント。
+			 *
+			 * 挿入先指定ダイアログを表示する際にエラーが発生するのを回避するため、
+			 * 取出順カラムを編集可能にして編集イベントをキャンセルする。
+			 *
+			 * ※取出順カラムを編集不可にするとエラー発生するようになるので注意
+			 * （なぜ編集不可だとエラーになるのかは不明）
+			 */
+			protected function grid_itemEditBeginHandler(event:AdvancedDataGridEvent):void {
+				event.preventDefault();
+			}
+		]]>
+
+	</fx:Script>
+
+
+	<fx:Declarations>
+		<!-- 非ビジュアルエレメント (サービス、値オブジェクトなど) をここに配置 -->
+		<s:RemoteObject id="srv" destination="lgMSpsService" fault="onSpsFault(event)"/>
+
+		<s:RemoteObject id="orderSrv" destination="lgMOrderService">
+			<s:method name="getLgMOrders" fault="onOrderGetFault(event)" />
+			<s:method name="updateAll" result="onOrderResult(event)" fault="onOrderSaveFault(event)" />
+		</s:RemoteObject>
+
+		<s:RemoteObject id="srvUser" destination="lgMUserService">
+			<s:method name="getUserCode" result="getUserCode_resultHandler(event)"/>
+			<s:method name="getSelectMst" result="getSelectMst_resultHandler(event)"/>
+		</s:RemoteObject>
+
+		<s:ArrayCollection id="ac"  list="{spsList.dataProvider as IList}" />
+		<s:ArrayCollection id="acO"  collectionChange="acO_collectionChangeHandler(event)" list="{grid.dataProvider as IList}" />
+
+	</fx:Declarations>
+	<s:HGroup width="100%" height="24" verticalAlign="middle" fontFamily="ＭＳ ゴシック">
+		<s:Label text="取出順マスタメンテナンス" height="24" fontSize="14" fontWeight="bold"/>
+	</s:HGroup>
+	<s:HGroup width="100%" height="24">
+		<s:HGroup width="45%" height="24" textAlign="left" verticalAlign="middle">
+			<s:Label text="SPS台車" />
+			<s:DropDownList id="spsList"
+							dataProvider="{srv.getLgMSpss.lastResult}" labelField="spsName"></s:DropDownList>
+			<s:Button label="検索" height="30" id="btnGetData" click="btnGetData_clickHandler(event)"/>
+		</s:HGroup>
+		<s:HGroup width="35%" height="24" verticalAlign="middle">
+			<s:Label text="背景色がグリーンの行は、順番が未設定の部品を表します"/>
+		</s:HGroup>
+		<s:HGroup width="20%" height="24" fontFamily="ＭＳ ゴシック" horizontalAlign="right" verticalAlign="middle">
+			<s:Label text="マスタ選択" textAlign="right"/>
+			<s:Label text="仮" fontWeight="bold" id="selectMst_Label"/>
+		</s:HGroup>
+	</s:HGroup>
+	<mx:AdvancedDataGrid id="grid" designViewDataType="flat" rowCount="20" width="100%" height="100%"
+						 allowMultipleSelection="true" dragMoveEnabled="true" dataProvider="{orderSrv.getLgMOrders.lastResult}"
+						 dragEnabled="true"  dropEnabled="true" sortExpertMode="true" dragDrop="grid_dragDropHandler(event)" dragStart="grid_dragStartHandler(event)"
+						 dragExit="grid_dragExitHandler(event)" dragEnter="grid_dragEnterHandler(event)" dragComplete="grid_dragCompleteHandler(event)"
+						 itemRollOver="grid_itemRollOverHandler(event)" itemEditBegin="grid_itemEditBeginHandler(event)">
+		<mx:columns>
+			<mx:AdvancedDataGridColumn headerText="取出順"  width="80" dataField="takeOrder" editable="true" sortable="false" itemRenderer="jp.co.ctc.components.ZeroOrderItemRenderer"/>
+			<mx:AdvancedDataGridColumn headerText="部品No." width="80" dataField="partCode" labelFunction="partCodeColumnFunction" editable="false" sortable="false" itemRenderer="jp.co.ctc.components.ZeroOrderItemRenderer"/>
+			<mx:AdvancedDataGridColumn headerText="部品名" labelFunction="partNameColumnFunction" editable="false" sortable="false" itemRenderer="jp.co.ctc.components.ZeroOrderItemRenderer"/>
+		</mx:columns>
+	</mx:AdvancedDataGrid>
+	<s:HGroup width="100%" height="32" horizontalAlign="center" verticalAlign="middle">
+		<s:Button label="保存" height="30" id="btnSaveData" click="btnSaveData_clickHandler(event)"/>
+		<s:Button label="終了" height="30" id="btnExit" click="btnExit_clickHandler(event)"/>
+	</s:HGroup>
+</s:Application>

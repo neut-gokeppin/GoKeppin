@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:mx="library://ns.adobe.com/flex/mx" width="250" height="150"
+			   close="titlewindow1_closeHandler(event)" enabled="true">
+	<s:Label x="19" y="10" text=" " id="itemName"/>
+	<s:Label x="19" y="30" text="設定したい順序を入力してください。"/>
+	<s:TextInput x="19" y="50" width="204" id="input" keyUp="input_keyUp(event)" />
+	<s:Button x="19" y="80" label="OK" click="setOrder();" width="94"/>
+	<s:Button x="129" y="80" label="キャンセル" click="closeWindow(-1);" width="94"/>
+	<fx:Script>
+		<![CDATA[
+			import jp.co.ctc.util.Utils;
+
+			import mx.events.CloseEvent;
+			import mx.managers.PopUpManager;
+			private var order:String;
+			/**
+			 * 表示するアイテム名のセッター
+			 */
+			public function setItemname(name:String):void {
+				itemName.text = name;
+			}
+			/**
+			 * 順序のゲッター
+			 */
+			public function getOrder():String {
+				return order;
+			}
+			/**
+			 * 順序のセッター
+			 * OKボタン押下イベント
+			 */
+			private function setOrder():void {
+				if (Utils.isSpaceJ(input.text)) {
+					closeWindow(-1);
+				} else {
+					order = Utils.jTrim(input.text);
+					closeWindow(1);
+				}
+			}
+			/**
+			 * キャンセルボタンの押下イベント
+			 * クローズイベントを発生させる。
+			 */
+			protected function closeWindow(detail:int):void {
+				var closeEvent:CloseEvent = new CloseEvent(mx.events.CloseEvent.CLOSE,false,false,detail);
+				dispatchEvent(closeEvent);
+			}
+
+			protected function titlewindow1_closeHandler(event:CloseEvent):void
+			{
+				PopUpManager.removePopUp(this);
+			}
+
+			/**
+			 * キーイベント。Enterキーが押されたらOKボタン押下時と同様の処理を行う
+			 */
+			protected function input_keyUp(event:KeyboardEvent):void{
+				if (event.keyCode == 13) {
+					setOrder();
+				}
+			}
+
+		]]>
+	</fx:Script>
+
+</s:TitleWindow>

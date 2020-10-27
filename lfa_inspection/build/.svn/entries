@@ -1,0 +1,31 @@
+10
+
+dir
+6799
+svn://161.95.4.226/LFA/branches/motomachi/lfa_inspection/build
+svn://161.95.4.226
+
+
+
+2010-09-03T11:22:16.736250Z
+75
+CJ01615
+
+
+svn:special svn:externals svn:needs-lock
+
+
+
+
+
+
+
+
+
+
+
+6e748774-039e-1a40-be09-1f268f404338
+
+test-classes
+dir
+

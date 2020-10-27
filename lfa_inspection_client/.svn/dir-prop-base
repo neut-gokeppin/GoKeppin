@@ -1,0 +1,10 @@
+K 10
+svn:ignore
+V 13
+asdoc-output
+
+K 13
+svn:mergeinfo
+V 42
+/LFA/trunk/lfa_inspection_client:1063-1099
+END

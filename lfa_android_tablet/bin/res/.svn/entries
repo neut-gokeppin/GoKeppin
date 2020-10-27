@@ -1,0 +1,43 @@
+10
+
+dir
+6799
+svn://161.95.4.226/LFA/branches/motomachi/lfa_android_tablet/bin/res
+svn://161.95.4.226
+
+
+
+2020-04-30T02:43:22.080375Z
+6557
+Z165169
+
+
+svn:special svn:externals svn:needs-lock
+
+
+
+
+
+
+
+
+
+
+
+6e748774-039e-1a40-be09-1f268f404338
+
+drawable-hdpi
+dir
+
+drawable-ldpi
+dir
+
+drawable-mdpi
+dir
+
+drawable-xhdpi
+dir
+
+drawable-xxhdpi
+dir
+

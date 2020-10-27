@@ -1,0 +1,244 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:mx="library://ns.adobe.com/flex/mx"
+			   pageTitle="誤欠品検出力向上ツール" 
+			   creationComplete="application1_creationCompleteHandler(event)">
+	<s:layout>
+		<s:HorizontalLayout/>
+	</s:layout>
+	<fx:Style source="lfa_inspection.css"/>
+
+	<fx:Metadata>
+		[ResourceBundle("message")]
+		[ResourceBundle("resource")]
+	</fx:Metadata>
+	
+	<fx:Script>
+		<![CDATA[
+			import jp.co.ctc.components.InputPassword;
+			import jp.co.ctc.entity.MUser;
+			import jp.co.ctc.util.MUserUtils;
+			import jp.co.ctc.util.Utils;
+			
+			import mx.controls.Alert;
+			import mx.events.CloseEvent;
+			import mx.events.FlexEvent;
+			import mx.managers.PopUpManager;
+			import mx.rpc.events.ResultEvent;
+				
+			private var user:MUser;
+			private var loginUser:String;
+			private var TITLE:String = "誤欠品検出力向上ツール"
+
+			/**
+			 * 画面起動時の処理。
+			 * ログインチェックを行う
+			 */
+			protected function application1_creationCompleteHandler(event:FlexEvent):void
+			{
+				// Debug用 ****************************************
+				//　Debugログインさせ、ログインが行われたようにする。
+				//srvUser.login("CJ00900");
+				
+				//ユーザーコードの取得
+				srvUser.getUserCode();
+			}
+
+			/**
+			 * ログインチェックの結果が返ってきたときの処理。
+			 * ログイン済みであれば何もしない。
+			 */
+			protected function getUserCode_resultHandler(event:ResultEvent):void
+			{
+				if (event.result == null) {
+					// ログインしていないので、ログイン画面に移動
+					var request:URLRequest = new URLRequest("login.html");
+					navigateToURL(request, "_self");
+				} else {
+					//ログインしている場合ユーザ情報を取得する。
+					this.loginUser = event.result.toString();
+					srvUser.getMUser(this.loginUser);
+					
+					// 2016/02/24 DA ins start
+					lblWarningPass.visible = false;
+					srvUser.getMUserPassWarningCheck();
+					// 2016/02/24 DA ins end
+				}
+			}
+
+			protected function getMUser_resultHandler(event:ResultEvent):void{
+				this.user = event.result as MUser;
+				// 2016/02/24 DA ins start
+				enabledComponent();
+				// 2016/02/24 DA ins end
+			}
+
+			// 2016/02/24 DA ins start
+			/**
+			 * パスワード期限警告表示チェック後の処理
+			 */
+			protected function getMUserPassWarningCheck_resultHandler(event:ResultEvent):void
+			{
+				if (event.result != null && event.result.toString() != "") {
+					var msg:String = ""
+					var ret:int = parseInt(event.result.toString());
+					if (ret < 0) {
+						msg = resourceManager.getString('resource','cli0300003');
+					}										
+					else if (ret == 0) {
+						msg = resourceManager.getString('resource','cli0300002');
+					}										
+					else {
+						msg = resourceManager.getString('resource','cli0300001');
+						msg = Utils.messageFormat(msg, ret.toString());
+					}					
+					lblWarningPass.text = msg;
+					lblWarningPass.visible = true;
+				}
+			}
+			// 2016/02/24 DA ins end
+
+			/**
+			 * パスワード変更ボタン押下時の処理。
+			 * 新規パスワード入力ダイアログを表示します。
+			 */
+			protected function btnChangePass_clickHandler(event:MouseEvent):void
+			{
+				var dialog:InputPassword = PopUpManager.createPopUp(this,InputPassword,true) as InputPassword;
+				dialog.addEventListener(CloseEvent.CLOSE,closeWindow);
+				// 2016/02/24 DA ins start
+				dialog.setUserCode(this.loginUser);
+				// 2016/02/24 DA ins end
+				PopUpManager.centerPopUp(dialog);
+				dialog.pass.setFocus();
+			}
+
+			/**
+			 * 入力ウィンドウが閉じられたときのイベント処理
+			 */
+			public function closeWindow(e:CloseEvent):void{
+				//OKが押下された場合だけ処理する。
+				if (e.detail != 1) {
+					return;
+				}
+
+				// 2016/02/24 DA del start
+				//this.user.passWord = e.target.getPassword();
+				//srvUser.update(this.user);
+				// 2016/02/24 DA del end
+
+				// 2016/02/24 DA ins start
+				// パスワード変更後、警告文字を非表示にする
+				lblWarningPass.visible = false;
+				// 2016/02/24 DA ins end
+
+				Alert.show("パスワードを変更しました。", TITLE);
+			}
+
+			/**
+			 * 検査結果出力ボタン押下時の処理。
+			 */
+			protected function btnResultOutput_clickHandler(event:MouseEvent):void
+			{
+				var request:URLRequest = new URLRequest("result_menu.html");
+				navigateToURL(request, "_self");
+			}
+
+			/**
+			 * 従業員メンテボタン押下時の処理。
+			 */
+			protected function btnUserMainte_clickHandler(event:MouseEvent):void
+			{
+				var request:URLRequest = new URLRequest("user_mainte.html");
+				navigateToURL(request, "_self");
+			}
+
+			/**
+			 * 検査項目メンテボタン押下時の処理。
+			 */
+			protected function btnInspecMainte_clickHandler(event:MouseEvent):void
+			{
+				var request:URLRequest = new URLRequest("master_menu.html");
+				navigateToURL(request, "_self");
+			}
+
+			/**
+			 * 検査結果履歴ボタン押下時の処理
+			 */
+			protected function btnResultInspect_clickHandler(event:MouseEvent):void
+			{
+				var request:URLRequest = new URLRequest("result_inspect.html");
+				navigateToURL(request, "_self");
+			}
+			
+			/**
+			 * 車種マスタメンテナンスボタン押下時の処理
+			 */ 
+			protected function btnModelMainte_clickHandler(event:MouseEvent):void
+			{
+				var request:URLRequest = new URLRequest("model_mainte.html");
+				navigateToURL(request, "_self");
+			}
+
+			// 2016/02/24 DA ins start
+			/**
+			 * コンポーネントの制御をする
+			 */
+			private function enabledComponent():void
+			{
+				if (MUserUtils.isAdministrator(this.user) ||
+					MUserUtils.OfficeOrganization(this.user) ||
+					MUserUtils.OfficeOrganizationNot(this.user)) {
+					// マスタ管理者
+					// 検査職制本番可
+					// 検査職制本番不可
+					btnUserMainte.enabled = true;
+					btnChangePass.enabled = true;
+					btnInspecMainte.enabled = true;
+					btnModelMainte.enabled = true;
+					btnResultInspect.enabled = true;
+				}
+				else if (MUserUtils.isExaminer(this.user)) {
+					// 検査員
+					btnUserMainte.enabled = false;
+					btnChangePass.enabled = false;
+					btnInspecMainte.enabled = false;
+					btnModelMainte.enabled = false;
+					btnResultInspect.enabled = false;
+				}
+				else {
+					// 以外
+					btnUserMainte.enabled = false;
+					btnChangePass.enabled = false;
+					btnInspecMainte.enabled = false;
+					btnModelMainte.enabled = false;
+					btnResultInspect.enabled = false;
+				}
+			}
+			// 2016/02/24 DA ins end
+		]]>
+	</fx:Script>
+	
+	<fx:Declarations>
+		<s:RemoteObject id="srvUser" destination="MUserService">
+			<s:method name="getUserCode" result="getUserCode_resultHandler(event)"/>
+			<s:method name="getMUser" result="getMUser_resultHandler(event)"/>
+			<s:method name="getMUserPassWarningCheck" result="getMUserPassWarningCheck_resultHandler(event)"/>
+		</s:RemoteObject>
+	</fx:Declarations>
+
+	<s:VGroup width="100%" height="100%" gap="40" horizontalAlign="center" verticalAlign="middle">
+		<s:Button id="btnUserMainte" width="360" height="45" label="従業員メンテナンス" click="btnUserMainte_clickHandler(event)" fontFamily="ＭＳ ゴシック" fontSize="18"/>
+
+		<s:VGroup width="100%" height="45" horizontalAlign="center" verticalAlign="top">
+			<s:Button id="btnChangePass" width="360" height="45" label="パスワードの変更" click="btnChangePass_clickHandler(event)" fontFamily="ＭＳ ゴシック" fontSize="18"/>
+			<s:Label id="lblWarningPass" visible="false" height="20" color="{resourceManager.getUint('resource','warningColor')}" fontFamily="ＭＳ ゴシック" fontSize="18" fontWeight="bold" text=""/>
+		</s:VGroup>
+
+		<s:Button id="btnInspecMainte" width="360" height="45" label="検査項目メンテナンス" click="btnInspecMainte_clickHandler(event)" fontFamily="ＭＳ ゴシック" fontSize="18"/>
+		<s:Button id="btnModelMainte" width="360" height="45" label="車種マスタメンテナンス" click="btnModelMainte_clickHandler(event)" fontFamily="ＭＳ ゴシック" fontSize="18"/>
+		<s:Button id="btnResultInspect" width="360" height="45" label="検査結果履歴" click="btnResultInspect_clickHandler(event)" fontFamily="ＭＳ ゴシック" fontSize="18"/>
+		<s:Button id="btnResultOutput" visible="false" width="360" height="45" label="検査結果出力" click="btnResultOutput_clickHandler(event)" fontFamily="ＭＳ ゴシック" fontSize="18"/>
+	</s:VGroup>
+</s:Application>

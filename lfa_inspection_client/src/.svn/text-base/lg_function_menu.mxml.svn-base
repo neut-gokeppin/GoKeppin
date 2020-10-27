@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:mx="library://ns.adobe.com/flex/mx"
+			   pageTitle="LFA物流・組立 部品棚管理システム" creationComplete="application1_creationCompleteHandler(event)">
+	<s:layout>
+		<s:HorizontalLayout/>
+	</s:layout>
+
+	<fx:Script>
+		<![CDATA[
+			import flash.net.navigateToURL;
+
+			import jp.co.ctc.components.InputPassword;
+			import jp.co.ctc.entity.LgMUser;
+
+			import mx.controls.Alert;
+			import mx.core.FlexGlobals;
+			import mx.events.CloseEvent;
+			import mx.events.FlexEvent;
+			import mx.managers.PopUpManager;
+			import mx.rpc.events.ResultEvent;
+
+			private var user:LgMUser;
+			private var loginUser:String;
+			private var TITLE:String = "LFA物流・組立 部品棚管理システム"
+
+			/**
+			 * 画面起動時の処理。
+			 * ログインチェックを行う
+			 */
+			protected function application1_creationCompleteHandler(event:FlexEvent):void
+			{
+				srvUser.getUserCode();
+			}
+
+			/**
+			 * ログインチェックの結果が返ってきたときの処理。
+			 * ログイン済みであれば何もしない。
+			 */
+			protected function getUserCode_resultHandler(event:ResultEvent):void
+			{
+				if (event.result == null) {
+						// ログインしていないので、ログイン画面に移動
+					var request:URLRequest = new URLRequest("lg_login.html");
+					navigateToURL(request, "_self");
+				} else {
+					//ログインしている場合ユーザ情報を取得する。
+					this.loginUser = event.result.toString();
+					srvUser.getMUser(this.loginUser);
+				}
+			}
+
+			protected function getMUser_resultHandler(event:ResultEvent):void{
+				this.user = event.result as LgMUser;
+			}
+
+
+			/**
+			 * パスワード変更ボタン押下時の処理。
+			 * 新規パスワード入力ダイアログを表示します。
+			 */
+			protected function btnChangePass_clickHandler(event:MouseEvent):void
+			{
+				var dialog:InputPassword = PopUpManager.createPopUp(this,InputPassword,true) as InputPassword;
+				dialog.addEventListener(CloseEvent.CLOSE,closeWindow);
+				PopUpManager.centerPopUp(dialog);
+				dialog.pass.setFocus();
+			}
+
+			/**
+			 * 入力ウィンドウが閉じられたときのイベント処理
+			 */
+			public function closeWindow(e:CloseEvent):void{
+				//OKが押下された場合だけ処理する。
+				if (e.detail != 1) {
+					return;
+				}
+
+				this.user.passWord = e.target.getPassword();
+				srvUser.update(this.user);
+				Alert.show("パスワードを変更しました。", TITLE);
+			}
+
+			/**
+			 * 結果確認ボタン押下時の処理。
+			 * 搬入・取出結果選択画面に遷移します。
+			 */
+			protected function btnResultConfirm_clickHandler(event:MouseEvent):void
+			{
+				var request:URLRequest = new URLRequest("lg_result_menu.html");
+				navigateToURL(request, "_self");
+			}
+
+			/**
+			 * 従業員メンテナンスボタン押下時の処理。
+			 * 従業員マスタメンテ画面に遷移します。
+			 */
+			protected function btnUserMainte_clickHandler(event:MouseEvent):void
+			{
+				var request:URLRequest = new URLRequest("lg_user_mainte.html");
+				navigateToURL(request, "_self");
+			}
+
+			/**
+			 * 組立マスタメンテナンスボタン押下時の処理。
+			 * マスタメニュー画面に遷移します。
+			 */
+			protected function btnConstructionMainte_clickHandler(event:MouseEvent):void
+			{
+				var request:URLRequest = new URLRequest("lg_master_menu.html");
+				navigateToURL(request, "_self");
+			}
+
+		]]>
+	</fx:Script>
+
+	<fx:Declarations>
+		<s:RemoteObject id="srvUser" destination="lgMUserService">
+			<s:method name="getUserCode" result="getUserCode_resultHandler(event)"/>
+			<s:method name="getMUser" result="getMUser_resultHandler(event)"/>
+		</s:RemoteObject>
+	</fx:Declarations>
+
+	<s:VGroup width="100%" height="100%" verticalAlign="middle" horizontalAlign="center" gap="40">
+		<s:Button label="結果確認" fontSize="18" fontFamily="ＭＳ ゴシック" width="360" height="45" id="btnResultConfirm" click="btnResultConfirm_clickHandler(event)"/>
+		<s:Button label="従業員マスタメンテナンス" fontSize="18" fontFamily="ＭＳ ゴシック" width="360" height="45" id="btnUserMainte"  click="btnUserMainte_clickHandler(event)"/>
+		<s:Button label="パスワードの変更" fontSize="18" fontFamily="ＭＳ ゴシック" width="360" height="45" id="btnChangePass" click="btnChangePass_clickHandler(event)"/>
+		<s:Button label="組立マスタメンテナンス" fontSize="18" fontFamily="ＭＳ ゴシック" width="360" height="45" id="btnConstructionMainte"  click="btnConstructionMainte_clickHandler(event)"/>
+	</s:VGroup>
+</s:Application>

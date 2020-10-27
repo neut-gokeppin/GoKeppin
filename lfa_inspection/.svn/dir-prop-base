@@ -1,0 +1,12 @@
+K 10
+svn:ignore
+V 9
+doc
+work
+
+K 13
+svn:mergeinfo
+V 87
+/LFA/branches/1.0.0/lfa_inspection:745-771
+/LFA/branches/4.2.0/lfa_inspection:2464-2487
+END

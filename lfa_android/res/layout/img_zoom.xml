@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:layout_width="fill_parent"
+    android:layout_height="fill_parent">
+<LinearLayout android:id="@+id/LinearLayout01" android:layout_width="fill_parent" android:layout_weight="1" android:orientation="vertical" android:layout_height="wrap_content">
+
+
+
+<LinearLayout android:id="@+id/LinearLayout08" android:gravity="center" android:layout_height="fill_parent" android:layout_weight="1" android:layout_width="fill_parent"><ImageView android:layout_height="fill_parent" android:layout_width="fill_parent" android:id="@+id/BL_IV_VIEW"></ImageView></LinearLayout><LinearLayout android:id="@+id/LinearLayout03" android:layout_height="wrap_content" android:gravity="center" android:layout_width="fill_parent">
+
+</LinearLayout><LinearLayout android:id="@+id/LinearLayout03" android:layout_height="wrap_content" android:gravity="center" android:layout_width="fill_parent">
+<ZoomControls android:id="@+id/ZoomControls01" android:layout_height="wrap_content" android:gravity="center" android:layout_width="fill_parent"></ZoomControls></LinearLayout>
+
+</LinearLayout><LinearLayout android:id="@+id/LinearLayout02" android:gravity="bottom" android:layout_width="fill_parent" android:layout_weight="5" android:layout_height="wrap_content" android:orientation="vertical"><LinearLayout android:id="@+id/LinearLayout04" android:layout_height="wrap_content" android:layout_width="fill_parent"><TextView android:id="@+id/TextView02" android:layout_height="wrap_content" android:layout_width="fill_parent" android:layout_weight="1"></TextView><TextView android:id="@+id/TextView02" android:layout_height="wrap_content" android:layout_width="fill_parent" android:layout_weight="1"></TextView><TextView android:id="@+id/TextView02" android:layout_height="wrap_content" android:layout_width="fill_parent" android:layout_weight="1"></TextView><Button android:layout_height="wrap_content" android:id="@+id/IZ_BT_OK" android:layout_width="fill_parent" android:layout_weight="1" android:text="閉じる"></Button></LinearLayout>
+
+
+
+
+
+
+</LinearLayout>
+
+</LinearLayout>

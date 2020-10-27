@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!---
+	AdvancedDataGridにて汎用的に利用できるチェックボックスです。
+	  ・チェックボックスをセルの中央に表示
+	  ・Boolean, int, String型に対応
+
+	チェックON/OFFは下記のルールで行っています。
+	詳細はソースを参照してください。
+	  Boolean：trueはON、falseはOFF
+	  int：0はOFF、OFF以外はON
+	  String：0/false/null/空はOFF、OFF以外はON
+-->
+<s:MXAdvancedDataGridItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009"
+								  xmlns:s="library://ns.adobe.com/flex/spark"
+								  xmlns:mx="library://ns.adobe.com/flex/mx"
+								  focusEnabled="true"
+								  dataChange="mxadvanceddatagriditemrenderer1_dataChangeHandler(event)">
+
+	<fx:Script>
+		<![CDATA[
+			import jp.co.ctc.entity.MItem;
+			import jp.co.ctc.event.MstSelectEvent;
+			import jp.co.ctc.util.MUserUtils;
+			import jp.co.ctc.util.Utils;
+			import mx.controls.AdvancedDataGrid;
+			import mx.controls.advancedDataGridClasses.AdvancedDataGridItemRenderer;
+			import mx.controls.advancedDataGridClasses.AdvancedDataGridListData;
+			import mx.events.FlexEvent;
+
+			/**
+			 * チェックボックスのON/OFFを切り替えられたときの処理
+			 */
+			protected function chkbox_changeHandler(event:Event):void
+			{
+				var ld:AdvancedDataGridListData = AdvancedDataGridListData(listData);
+				var field:String = ld.dataField;
+				var value:Object = ld.item[field];
+				if (value is Boolean) {
+					ld.item[field] = chkbox.selected;
+				} else if (value is int) {
+					ld.item[field] = chkbox.selected ? 1 : 0;
+				} else if (value is String) {
+					ld.item[field] = chkbox.selected ? "1" : "0";
+				}
+			}
+
+			/**
+			 * グリッド内のデータに変更があったときの処理
+			 */
+			protected function mxadvanceddatagriditemrenderer1_dataChangeHandler(event:FlexEvent):void
+			{
+				if (listData == null) {
+					return;
+				}
+				var value:String = listData.label;
+				chkbox.selected = !Utils.isEmpty(value) && value != "false" && value != "0";
+
+				try {
+					// selectMstが存在する画面で、本番マスタ選択時は編集不可
+					// 2016/02/24 DA upd start
+//					if (parentApplication.hasOwnProperty("selectMst") && parentApplication.selectMst == 1) {
+					if(parentApplication.hasOwnProperty("selectMst") && MstSelectEvent.isReal(parentApplication.selectMst)) {						
+						chkbox.enabled = false;
+						return;
+					}
+					
+					//ユーザー権限チェック
+					if(parentApplication.hasOwnProperty("loginUserInfo") && MUserUtils.isAdministrator(parentApplication.loginUserInfo) == false) {						
+						chkbox.enabled = false;
+						return;
+					}
+					// 2016/02/24 DA upd end
+
+					/* ITAGE JYO 2013-04-16 仮マスタ本番登録 001 S */
+					// isMstChangeが存在する画面で、仮マスタ本番登録画面には編集不可
+					if (parentApplication.hasOwnProperty("isMasterRegist") && parentApplication.isMasterRegist == true) {
+						chkbox.height = 24;
+						chkbox.enabled = false;
+						return;
+					}
+					/* ITAGE JYO 2013-04-16 仮マスタ本番登録 001 E */
+					
+					// 2016/02/24 DA ins start
+					// 車種の予約フラグが予約の時
+					if (parentApplication.hasOwnProperty("isReservedMVehicle") && parentApplication.isReservedMVehicle == true) {
+						chkbox.height = 24;
+						chkbox.enabled = false;
+						return;
+					}
+
+					if (parentApplication.hasOwnProperty("isItemMainte") && parentApplication.isItemMainte == true) {
+						var mItem:MItem = this.data as MItem;
+						if (mItem.checkReserveFlag()){
+							chkbox.height = 24;
+							chkbox.enabled = false;
+							return;
+						}
+						else {
+							chkbox.height = 24;
+							chkbox.enabled = true;
+							return;
+						}
+					}
+					
+					chkbox.height = 24;
+					chkbox.enabled = true;	
+					// 2016/02/24 DA ins end
+					
+				}
+				catch (e:Error) {
+					return;
+				}
+			}
+		]]>
+	</fx:Script>
+
+	<s:CheckBox id="chkbox" horizontalCenter="0" change="chkbox_changeHandler(event)" />
+</s:MXAdvancedDataGridItemRenderer>

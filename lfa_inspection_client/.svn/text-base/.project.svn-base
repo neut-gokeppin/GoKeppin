@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<projectDescription>
+	<name>lfa_inspection_client</name>
+	<comment></comment>
+	<projects>
+	</projects>
+	<buildSpec>
+		<buildCommand>
+			<name>com.adobe.flexbuilder.project.flexbuilder</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+		<buildCommand>
+			<name>net.sf.eclipsecs.core.CheckstyleBuilder</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+	</buildSpec>
+	<natures>
+		<nature>com.adobe.flexbuilder.project.flexnature</nature>
+		<nature>com.adobe.flexbuilder.project.actionscriptnature</nature>
+		<nature>net.sf.eclipsecs.core.CheckstyleNature</nature>
+	</natures>
+	<linkedResources>
+		<link>
+			<name>bin-debug</name>
+			<type>2</type>
+			<locationURI>DOCUMENTS/lfa_inspection/webapp/lfa_inspection_client-debug</locationURI>
+		</link>
+		<link>
+			<name>bin-release</name>
+			<type>2</type>
+			<locationURI>DOCUMENTS/lfa_inspection/webapp/lfa_inspection_client</locationURI>
+		</link>
+	</linkedResources>
+</projectDescription>

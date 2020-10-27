@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!---
+	AdvancedDataGridにて汎用的に利用できるコンボボックスです。
+	・グループ名を格納します。
+	・左ハンドル・右ハンドルに対応
+	・本番マスタ選択時には編集不可
+
+
+	使用場所は「item_mainte.mxml」です。
+
+-->
+<s:MXAdvancedDataGridItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009"
+								  xmlns:s="library://ns.adobe.com/flex/spark"
+								  xmlns:mx="library://ns.adobe.com/flex/mx"
+								  focusEnabled="true"
+								  dataChange="mxadvanceddatagriditemrenderer1_dataChangeHandler(event)">
+	<fx:Script>
+		<![CDATA[
+			import jp.co.ctc.entity.MGroup;
+			import jp.co.ctc.entity.MOrder;
+			import jp.co.ctc.entity.MItem;
+			import jp.co.ctc.event.MstSelectEvent;
+			import jp.co.ctc.util.MUserUtils;
+
+			import mx.collections.ArrayCollection;
+			import mx.collections.IList;
+			import mx.controls.AdvancedDataGrid;
+			import mx.controls.advancedDataGridClasses.AdvancedDataGridItemRenderer;
+			import mx.controls.advancedDataGridClasses.AdvancedDataGridListData;
+			import mx.events.FlexEvent;
+
+			import spark.events.IndexChangeEvent;
+
+			/**
+			 * グリッドにデータがセットされたときの処理
+			 */
+			protected function mxadvanceddatagriditemrenderer1_dataChangeHandler(event:FlexEvent):void
+			{
+
+				if(listData == null){
+					return;
+				}
+
+				var ld:AdvancedDataGridListData = AdvancedDataGridListData(listData);
+				var field:String = ld.dataField;
+
+				// dataProviderがセットされていなければセットする
+				if (cmbboxInsGroup.dataProvider == null){
+					cmbboxInsGroup.dataProvider = parentApplication.DdlList;
+				}
+
+				// 初期値をセット
+				cmbboxInsGroup.selectedIndex = 0;
+
+				var groupList:IList = cmbboxInsGroup.dataProvider;
+				var loop_cnt:int;
+
+				if (ld != null && ld.item[field] != null && ld.item[field].length > 0){
+					for (loop_cnt=0;loop_cnt<groupList.length;loop_cnt++ ){
+						if ( (groupList[loop_cnt] as MGroup).groupCode == ld.item[field][0].groupCode){
+							cmbboxInsGroup.selectedIndex = loop_cnt;
+							break;
+						}
+					}
+				}
+				
+				// 2016/02/24 DA ins start
+				// 本番マスタ選択時は選択不可
+				if (MstSelectEvent.isReal(parentApplication.selectMst)) {
+					cmbboxInsGroup.enabled = false;
+					return;
+				}
+				
+				//ユーザー権限チェック
+				if(parentApplication.hasOwnProperty("loginUserInfo") && MUserUtils.isAdministrator(parentApplication.loginUserInfo) == false) {						
+					cmbboxInsGroup.enabled = false;
+					return;
+				}
+
+				// 車種の予約フラグが予約の時
+				if (parentApplication.hasOwnProperty("isReservedMVehicle") && parentApplication.isReservedMVehicle == true) {
+					cmbboxInsGroup.enabled = false;
+					return;
+				}
+
+				if (parentApplication.hasOwnProperty("isItemMainte") && parentApplication.isItemMainte == true) {
+					var mItem:MItem = this.data as MItem;
+					if (mItem.checkReserveFlag()){
+//						this.enabled = false;
+						cmbboxInsGroup.enabled = false;
+					}
+					else {
+//						this.enabled = true;
+						cmbboxInsGroup.enabled = true;
+					}
+				}
+
+				// 2016/02/24 DA ins end
+			}
+
+
+			/**
+			 * コンボボックス上でデータが変更されたときの処理
+			 */
+			protected function cmbboxInsGroup_changeHandler(event:IndexChangeEvent):void
+			{
+				// コンボボックスに直接手入力された場合など、
+				// 該当する工程が存在しないことがある。
+				// その場合、編集前の状態に戻す
+				if (event.newIndex < -1) {
+					cmbboxInsGroup.selectedIndex = event.oldIndex;
+					return;
+				}
+
+
+				if(listData == null){
+					return;
+				}
+
+				var ld:AdvancedDataGridListData = AdvancedDataGridListData(listData);
+				var field:String = ld.dataField;
+
+				// MOrderレコードが存在するかチェック
+				if (ld.item[field] != null && ld.item[field].length > 0){
+
+					// MOrderが存在する場合、上書き
+					ld.item[field][0].groupCode = cmbboxInsGroup.selectedItem.groupCode;
+
+					// 新規追加行でなければ、編集区分を「更新」にする
+					if (ld.item["editDiv"] != "I"){
+						ld.item["editDiv"] = "U";
+					}
+
+					// グループ設定が新規追加でなければ
+					if (ld.item[field][0].editDiv != "I") {
+						// 編集区分を「更新」に、更新者を格納
+						ld.item[field][0].editDiv = "U";
+						ld.item[field][0].updateUser = parentApplication.loginUser;
+
+						// 変更したコンボボックスにより格納する値を分岐
+						switch (field){
+							// 左ハンドルグループ
+							case "mOrderL":
+								ld.item[field][0].ptnDiv = "1";
+								ld.item[field][0].inspecOrder = 0;
+								break;
+							// 右ハンドルグループ
+							case "mOrderR":
+								ld.item[field][0].ptnDiv = "2";
+								ld.item[field][0].inspecOrder = 0;
+								break;
+						}
+					}
+
+					// MOrderが存在しない場合
+				} else {
+
+					// MOrderが存在しない場合、MOrder作成
+					var mOrder:MOrder = new MOrder();
+
+					// 編集区分・作成者を格納
+					mOrder.editDiv = "I";
+					mOrder.insertUser = parentApplication.loginUser;
+					// 2016/02/24 DA ins start
+					mOrder.mstVer = cmbboxInsGroup.selectedItem.mstVer;
+					// 2016/02/24 DA ins end
+
+					// コンボボックスを選択した項目により格納する値を分岐
+					switch (field){
+						// 左ハンドルグループ
+						case "mOrderL":
+							mOrder.groupCode = cmbboxInsGroup.selectedItem.groupCode;
+							mOrder.ptnDiv = "1";
+							break;
+						// 右ハンドルグループ
+						case "mOrderR":
+							mOrder.groupCode = cmbboxInsGroup.selectedItem.groupCode;
+							mOrder.ptnDiv = "2";
+							break;
+					}
+
+					// 新規追加行でなければ、行の編集区分に「更新」を格納
+					if (ld.item["editDiv"] != "I") {
+						ld.item["editDiv"] = "U";
+					}
+
+					// MOder(LgMOrder)がnullなら空の配列を格納
+					if (ld.item[field] == null) {
+						ld.item[field] = new ArrayCollection();
+					}
+
+					ld.item[field].addItem(mOrder);
+				}
+
+				// dummyの使用目的
+				// 上記のif-elseの処理を行ってもGridの更新イベントが実行されないケースがある。
+				// 強制的にGridを更新する為にDummyの値を変更する。
+				data.dummy = data.dummy +1;
+			}
+		]]>
+	</fx:Script>
+	<!-- 2016/02/24 DA upd start -->
+	<!--
+	<s:ComboBox id="cmbboxInsGroup" width="100%" labelField="groupName" enabled="{parentApplication.selectMst==0}" horizontalCenter="0" change="cmbboxInsGroup_changeHandler(event)"/>
+	-->
+	<s:ComboBox id="cmbboxInsGroup" width="100%" labelField="groupName" horizontalCenter="0" change="cmbboxInsGroup_changeHandler(event)"/>
+	<!-- 2016/02/24 DA upd end -->
+</s:MXAdvancedDataGridItemRenderer>

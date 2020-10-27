@@ -1,0 +1,504 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:mx="library://ns.adobe.com/flex/mx" pageTitle="LFA物流・組立 部品棚管理システム"
+			   creationComplete="application1_creationCompleteHandler(event)" xmlns:components="jp.co.ctc.components.*">
+	<s:layout>
+		<s:VerticalLayout paddingLeft="8" paddingRight="8" paddingTop="8" paddingBottom="8" horizontalAlign="center" gap="8"/>
+	</s:layout>
+
+	<fx:Style source="lfa_inspection.css"/>
+	<fx:Script>
+		<![CDATA[
+			import jp.co.ctc.entity.LgMUser;
+			import jp.co.ctc.util.Utils;
+
+			import mx.charts.chartClasses.ChartItemDragProxy;
+			import mx.collections.ArrayList;
+			import mx.controls.Alert;
+			import mx.controls.List;
+			import mx.controls.advancedDataGridClasses.AdvancedDataGridItemRenderer;
+			import mx.events.AdvancedDataGridEvent;
+			import mx.events.CloseEvent;
+			import mx.events.CollectionEvent;
+			import mx.events.CollectionEventKind;
+			import mx.events.FlexEvent;
+			import mx.events.ListEvent;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+
+			private var TITLE:String = "従業員マスタメンテ";
+			private var rmenuItem:LgMUser;
+			private var rmenuIndex:int = -1;
+			private var rmenu:ContextMenu;
+			private var rmenuitem1:ContextMenuItem;
+			private var rmenuitem2:ContextMenuItem;
+			private var removedRows:ArrayCollection = new ArrayCollection();
+
+			private var hasNewRecodes:Boolean = false;	//レコードの追加を行っているかどうか
+
+			// Debug用 ****************************************
+			// メニュー&ログイン画面から選択された従業員コードを取得するように修正する
+			private var loginUser:String = "CJ00900";
+
+			// スペース削除用の正規パターン?
+			private var pattern:RegExp = /^[\u3000\s]+|[\u3000\s]+$/g;
+
+			/**
+			 * 初期ロード時の処理。
+			 * ユーザーコードを取得します。
+			 */
+			protected function application1_creationCompleteHandler(event:FlexEvent):void
+			{
+
+				//ユーザーコードの取得
+				srv.getUserCode();
+
+				// Alertのボタンの幅を変更
+				// デフォルトの60だと"キャンセル"の文字が表示しきれない。
+				Alert.buttonWidth = 100;
+
+				//初期ロードの全件表示
+				srv.getMUsersByKeys();
+
+				//グリッドのメニューの設定
+				rmenu = new ContextMenu();
+				rmenu.hideBuiltInItems();
+				rmenu.addEventListener(ContextMenuEvent.MENU_SELECT, rmenu_menuSelectHandler);
+				rmenuitem1 = new ContextMenuItem("行を追加");
+				rmenuitem1.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, addRowHandler);
+				rmenu.customItems.push(rmenuitem1);
+				rmenuitem2 = new ContextMenuItem("行を削除");
+				rmenuitem2.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, removeRowHandler);
+				rmenu.customItems.push(rmenuitem2);
+				grid.contextMenu = rmenu;
+
+			}
+
+			/**
+			 * ユーザーコードの取得後の処理。
+			 * ユーザコードがなければログインページに戻す
+			 */
+			protected function getUserCode_resultHandler(event:ResultEvent):void
+			{
+				//ユーザコードがなければログインページに戻す
+				if (event.result==null) {
+					var request:URLRequest = new URLRequest("lg_login.html");
+					navigateToURL(request, "_self");
+				}
+				else{
+					this.loginUser = event.result.toString();
+				}
+			}
+
+			/**
+			 * 右クリックメニュー表示時の処理
+			 */
+			private function rmenu_menuSelectHandler(event:ContextMenuEvent):void {
+				// 右クリックされた行を保持しておく
+				if (-1 < rmenuIndex && rmenuIndex < ac.length) {
+					rmenuItem = ac.getItemAt(rmenuIndex) as LgMUser;
+				} else {
+					rmenuItem = null;
+				}
+			}
+
+			/**
+			 * 検索ボタン押下時の処理。
+			 */
+			protected function btnSerch_clickHandler(event:MouseEvent):void
+			{
+				//編集のチェック
+				if (updataExists()) {
+					// 編集あり
+					var myAlert : Alert = Alert.show("変更が保存されていません。\n検索すると変更が破棄されます。よろしいですか？",
+						TITLE,
+						Alert.OK | Alert.CANCEL, null,
+						function(event:CloseEvent):void {
+						if (event.detail == Alert.OK) {
+							getUserData();
+							return;
+						}
+					}
+					);
+				}
+				else {
+					getUserData();
+				}
+			}
+
+			/**
+			 * 入力された検索条件からを従業員データを取得します
+			 */
+			private function getUserData():void{
+				//入力された値を変数に格納
+				var userCode:String = txtUserCode.text;
+				var userName:String = txtUserName.text;
+				var teamCode:String = txtTeamCode.text.toString();
+				var deleteFlag:String = "";
+
+				//削除フラグの有無
+				if(chkDelete.selected){
+					deleteFlag = "1";
+				}else{
+					deleteFlag = "";
+				}
+				srv.getMUsersByKeys(userCode,userName,teamCode,deleteFlag);
+			}
+
+
+			/**
+			 * 行追加の処理。
+			 */
+			private function addRowHandler(item:ContextMenuEvent):void {
+				// 右クリックした行番号を取得
+				// 行選択チェック
+				if (rmenuItem == null) {
+					return;
+				}
+				var mUser:LgMUser = rmenuItem;
+				var row:int = ac.getItemIndex(mUser);
+
+				var user:LgMUser = new LgMUser();
+				//Flagの初期値を0で格納、作成者も格納
+				user.deleteFlag = "0";
+				user.insertUser = loginUser;
+				user.editDiv = "I";
+
+				ac.addItemAt(user, row + 1);
+				// 追加した行を選択状態にする
+				grid.selectedIndex = row + 1;
+			}
+
+			/**
+			 * 行削除の処理。
+			 */
+			private function removeRowHandler(item:ContextMenuEvent):void
+			{
+				// 右クリックした行番号を取得
+				// 行選択チェック
+				if (rmenuItem == null) {
+					return;
+				}
+				var mUser:LgMUser = rmenuItem;
+				var row:int = ac.getItemIndex(mUser);
+
+				var user:LgMUser = ac[row];
+
+				// 新規追加した行でなければ、削除した行を削除用配列に退避
+				if(user.editDiv != "I")
+				{
+					Alert.show("新規追加した行以外は削除できません",TITLE);
+
+				// 新規追加した行は単純に削除
+				}else{
+					ac.removeItemAt(row);
+				}
+			}
+
+			/**
+			 * グリッドの値を持つArrayの値が変更された時の処理。
+			 * グリッドの新規追加・削除・更新に対応した処理を行います。
+			 */
+			protected function ac_collectionChangeHandler(event:CollectionEvent):void
+			{
+				if(event.kind==CollectionEventKind.UPDATE){
+
+					var editDiv:String = (ac[grid.selectedIndex] as LgMUser).editDiv;
+
+					if (editDiv != "I") {
+						// 新規に追加した行でなければ編集区分にU:変更をセットし、
+						// 更新者にログインユーザーをセット
+						(ac[grid.selectedIndex] as LgMUser).editDiv = "U";
+						(ac[grid.selectedIndex] as LgMUser).updateUser = loginUser;
+					}
+				}
+			}
+
+			/**
+			 * 終了ボタン押下時の処理。
+			 */
+			private function btnExit_clickHandler(event:MouseEvent):void{
+
+				if (updataExists()) {
+					// 編集あり
+					var myAlert : Alert = Alert.show("変更が保存されていません。終了してもよろしいですか？",
+						TITLE,
+						Alert.OK | Alert.CANCEL, null, alertCloseHandler);
+					return;
+				}
+
+				// Browserを閉じる
+				closeMyBrowser();
+				return;
+			}
+
+			/**
+			 * 変更の有無をチェックします
+			 * @return true:変更有　false:変更無
+			 */
+			private function updataExists():Boolean{
+				// 変更有無チェック
+				for (var loop_cnt:int =0;loop_cnt < ac.length; loop_cnt++) {
+					var user:LgMUser = ac[loop_cnt];
+					if (user.editDiv != null) {
+						return  true;
+					}
+				}
+				return false;
+			}
+
+			/**
+			 * 終了確認ダイアログの結果処理
+			 */
+			private function alertCloseHandler(e:CloseEvent) : void
+			{
+				if (e.detail == Alert.OK) {
+					closeMyBrowser();
+					return;
+				}
+			}
+			/**
+			 * ブラウザの終了
+			 */
+			private function closeMyBrowser():void
+			{
+				// 機能選択画面に遷移する
+				var request:URLRequest = new URLRequest("lg_function_menu.html");
+				navigateToURL(request, "_self");
+			}
+
+			/**
+			 * 保存ボタン押下時の処理。
+			 */
+			protected function btnUpdate_clickHandler(event:MouseEvent):void
+			{
+
+				var user:LgMUser;
+				var editFlag:Boolean = false;
+				var loop_cnt:int;
+
+				this.hasNewRecodes = false;
+
+				// 変更有無チェック
+				if (removedRows.length == 0) {
+					for ( loop_cnt =0;loop_cnt < ac.length; loop_cnt++) {
+						user = ac[loop_cnt];
+						if (user.editDiv != null) {
+							editFlag = true;
+							break;
+						}
+					}
+					if (editFlag==false) {
+						Alert.show("保存する内容がありません",TITLE);
+						return;
+					}
+				}
+
+				for ( loop_cnt =0;loop_cnt < ac.length; loop_cnt++) {
+					user = ac[loop_cnt];
+
+					if(user.editDiv == null){
+						continue;
+					}
+
+					//トリムした値を格納。Nullの時は空白を格納
+					var userCode:String = Utils.jTrimToEmpty(user.userCode);
+					var userName:String = Utils.jTrimToEmpty(user.userName);
+					var teamCode:String = Utils.jTrimToEmpty(user.teamCode);
+					var postName:String = Utils.jTrimToEmpty(user.postName);
+
+					//新規追加時の従業員コードチェック
+					if(user.editDiv=="I"){
+						this.hasNewRecodes = true;		//レコードの追加を行っているとみなす。
+
+						if(userCode.length == 0){
+							Utils.gridSelectRow(grid,loop_cnt);
+							Alert.show("従業員コードが入力されていません。",TITLE);
+							return;
+						}
+
+						//英数字チェックを実行(正しければ英字を大文字に変換)
+						if(!char_NumEng_check(userCode)){
+							Utils.gridSelectRow(grid,loop_cnt);
+							return;
+						}else{
+							userCode = userCode.toUpperCase();
+						}
+
+						//コードの重複チェック
+						for(var i:int=0; i<ac.length ;i++){
+							if(loop_cnt == i){
+								continue;
+							}
+							var user2:LgMUser = ac[i];
+							if(userCode==user2.userCode){
+								Utils.gridSelectRow(grid,i);
+								Alert.show("この従業員は既に存在します。",TITLE);
+								return;
+							}
+						}
+
+					}
+
+					//名前のチェック
+					if (userName.length == 0){
+						Utils.gridSelectRow(grid,loop_cnt);
+						Alert.show("名前が入力されていません。",TITLE);
+						return;
+					}
+					if (userName.length > 30){
+						Utils.gridSelectRow(grid,loop_cnt);
+						Alert.show("名前を30文字以下にしてください。",TITLE);
+						return;
+					}
+
+					//組コードのチェック
+					if (teamCode.length > 5){
+						Utils.gridSelectRow(grid,loop_cnt);
+						Alert.show("組コードを５文字以下にしてください。",TITLE);
+						return;
+					}
+					//組コードの入力チェック
+					for (i=0;i<teamCode.length;i++) {
+						var char_teamCode:String = teamCode.charAt(i)
+						if(char_teamCode.match(/[0-9A-Za-z]/) == null){
+							Utils.gridSelectRow(grid,loop_cnt);
+							Alert.show("組が正しくありません。",TITLE);
+							return;
+						}
+					}
+					//部署名チェック
+					if (postName.length > 30){
+						Utils.gridSelectRow(grid,loop_cnt);
+						Alert.show("部署名を30文字以下にしてください。",TITLE);
+						return;
+					}
+
+					//チェックが通ればその値を格納
+					user.userCode = userCode;
+					user.userName = userName;
+					user.teamCode = teamCode;
+					user.postName = postName;
+					ac[loop_cnt] = user;
+				}
+
+				// 変更内容をデータベースに反映
+				srv.updateAll(ac);
+				// データベースから最新のデータを取得
+				srv.getMUsersByKeys();
+				// removedRowsを初期化
+				removedRows = new ArrayCollection();
+			}
+
+			/**
+			 * 従業員コードの英数字チェック。
+			 * @return true:チェックOK　false:チェックNG
+			 */
+			private function char_NumEng_check(userCode:String):Boolean
+			{
+				var user:String = userCode;
+				//英数字の7文字がチェック
+				if(user.length != 7 || user.match(/[0-9A-Za-z]{7}/) == null){
+					Alert.show("従業員コードが正しくありません。",TITLE);
+					return false;
+				}
+				return true;
+			}
+
+
+			/**
+			 * Data更新正常完了
+			 */
+			private function onUpdateAllResult(e:ResultEvent):void
+			{
+				var msg:String = "";
+				if (hasNewRecodes) {
+					msg = "保存が完了しました。\n\n※追加した従業員のパスワードは従業員コードです。\n　ログイン時に必ず変更してください。\n\n";
+				} else {
+					msg = "保存が完了しました。";
+				}
+				Alert.show(msg,TITLE);
+			}
+
+			/**
+			 * Data更新Error Event
+			 */
+			private function onUpdateAllFault(e:FaultEvent):void
+			{
+				Alert.show("保存に失敗しました。",TITLE);
+			}
+
+			/**
+			 * グリッド上のデータにマウスが乗ったときの処理
+			 */
+			protected function grid_itemRollOverHandler(event:ListEvent):void
+			{
+				// マウスカーソルの乗っている行を保持しておく。
+				// 右クリックで使用する
+				rmenuIndex = event.rowIndex;
+			}
+
+			/**
+			 * グリッドを編集時の処理。
+			 */
+			protected function grid_itemEditBeginHandler(event:AdvancedDataGridEvent):void
+			{
+				// 新規追加行以外の従業員コードを編集したときは処理を無効にする
+				if (event.columnIndex == 0 && LgMUser(event.itemRenderer.data).editDiv != "I")
+				{
+					event.preventDefault();
+				}
+			}
+
+		]]>
+	</fx:Script>
+
+	<fx:Declarations>
+		<s:RemoteObject id="srv" destination="lgMUserService">
+			<s:method name="getMUsersByKeys"/>
+			<s:method name="updateAll" result="onUpdateAllResult(event)" fault="onUpdateAllFault(event)"/>
+			<s:method name="getUserCode" result="getUserCode_resultHandler(event)"/>
+		</s:RemoteObject>
+		<s:ArrayCollection id="ac" collectionChange="ac_collectionChangeHandler(event)" list="{grid.dataProvider as IList}" />
+	</fx:Declarations>
+	<s:HGroup width="100%" height="24" verticalAlign="middle" fontFamily="ＭＳ ゴシック">
+		<s:Label text="従業員マスタメンテナンス" fontSize="14" fontWeight="bold"/>
+	</s:HGroup>
+	<s:HGroup width="100%" height="24" verticalAlign="middle" fontFamily="ＭＳ ゴシック">
+		<s:Label text="従業員コード" width="125" verticalAlign="middle"/>
+		<s:TextInput id="txtUserCode" maxChars="7" width="125" tabIndex="1"/>
+		<s:Label width="25"/>
+		<s:Label text="名前" width="100" verticalAlign="middle"/>
+		<s:TextInput id="txtUserName" width="125" tabIndex="2"/>
+	</s:HGroup>
+	<s:HGroup width="100%" height="24" verticalAlign="middle" fontFamily="ＭＳ ゴシック">
+		<s:Label width="125" text="組コード" verticalAlign="middle"/>
+		<s:TextInput id="txtTeamCode" maxChars="5" width="125" tabIndex="3"/>
+		<s:Label width="25" text=""/>
+		<s:CheckBox width="100" label="削除" id="chkDelete" tabIndex="4"/>
+		<s:Button label="検索"  id="btnSerch" fontSize="12" height="30" click="btnSerch_clickHandler(event)" tabIndex="5"/>
+	</s:HGroup>
+
+	<mx:AdvancedDataGrid id="grid" designViewDataType="flat" width="100%" height="100%"
+						 dataProvider="{srv.getMUsersByKeys.lastResult}" x="1" y="140"
+						 editable="true" sortExpertMode="true" tabIndex="6"  draggableColumns="false"
+						 itemRollOver="grid_itemRollOverHandler(event)" itemEditBegin="grid_itemEditBeginHandler(event)">
+		<mx:columns>
+			<mx:AdvancedDataGridColumn headerText="従業員コード" dataField="userCode" sortable="true"
+									   itemRenderer="jp.co.ctc.components.BackgroundColorItemRenderer"/>
+			<mx:AdvancedDataGridColumn headerText="名前" dataField="userName" sortable="true"
+									   itemRenderer="jp.co.ctc.components.BackgroundColorItemRenderer"/>
+			<mx:AdvancedDataGridColumn headerText="組コード" dataField="teamCode"
+									   itemRenderer="jp.co.ctc.components.BackgroundColorItemRenderer"/>
+			<mx:AdvancedDataGridColumn headerText="部署名" dataField="postName" sortable="true"
+									   itemRenderer="jp.co.ctc.components.BackgroundColorItemRenderer"/>
+			<mx:AdvancedDataGridColumn headerText="削除" editable="false" sortable="false"
+									   itemRenderer="jp.co.ctc.components.CheckBox" dataField="deleteFlag"/>
+		</mx:columns>
+	</mx:AdvancedDataGrid>
+	<s:HGroup width="100%" height="24" verticalAlign="middle" horizontalAlign="center" fontFamily="ＭＳ ゴシック">
+		<s:Button id="btnUpdate" label="保存" height="30" fontSize="12" click="btnUpdate_clickHandler(event)" tabIndex="7"/>
+		<s:Button id="btnExit" label="終了" height="30" fontSize="12" click="btnExit_clickHandler(event)" tabIndex="8"/>
+	</s:HGroup>
+</s:Application>

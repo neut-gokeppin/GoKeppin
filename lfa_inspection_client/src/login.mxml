@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:mx="library://ns.adobe.com/flex/mx"
+			   pageTitle="誤欠品検出力向上ツール"
+			   preinitialize="application1_preinitializeHandler(event)"
+			   creationComplete="application1_creationCompleteHandler(event)">
+	<s:layout>
+		<s:HorizontalLayout paddingLeft="8" paddingRight="8" paddingTop="8" paddingBottom="8" horizontalAlign="center" gap="8"/>
+	</s:layout>
+	<fx:Style source="lfa_inspection.css"/>
+
+	<fx:Metadata>
+		[ResourceBundle("message")]
+		[ResourceBundle("resource")]
+	</fx:Metadata>
+	
+	<fx:Script>
+		<![CDATA[
+			import jp.co.ctc.components.InputPassword;
+			
+			import mx.controls.Alert;
+			import mx.events.CloseEvent;
+			import mx.events.FlexEvent;
+			import mx.managers.PopUpManager;
+			import mx.rpc.events.ResultEvent;
+			import mx.utils.StringUtil;
+			private var TITLE:String = "誤欠品検出力向上ツール";
+
+			/**
+			 * ログインボタン押下時の処理。
+			 * ログインチェックを行います。
+			 */
+			protected function button1_clickHandler(event:Event):void
+			{
+				// ログイン処理
+				// 2016/02/24 DA upd start
+				//srv.login(StringUtil.trim(txtCode.text).toUpperCase(), txtPass.text);
+				srv.loginAuthority(StringUtil.trim(txtCode.text).toUpperCase(), txtPass.text);
+				// 2016/02/24 DA upd end
+			}
+
+			/**
+			 * ログインチェック完了後の処理。
+			 * 成功時に機能選択画面に繊維します。
+			 */
+			protected function srv_resultHandler(event:ResultEvent):void
+			{
+				if (event.result == 1) {
+					// ログイン成功。
+					// マスタメンテナンスメニュー画面に遷移する
+					var request:URLRequest = new URLRequest("function_menu.html");
+					navigateToURL(request, "_self");
+				}
+				// 2016/02/24 DA ins start
+				else if (event.result == 2) {
+					// パスワード期限切れ
+					var dialog:InputPassword = PopUpManager.createPopUp(this,InputPassword,true) as InputPassword;
+					dialog.addEventListener(CloseEvent.CLOSE,closeInputPassword);
+					dialog.setUserCode(getUserCode());
+					PopUpManager.centerPopUp(dialog);
+					dialog.pass.setFocus();
+				}
+				else if (event.result == 3) {
+					// アクセス権限なし
+					Alert.show(resourceManager.getString('message','msg00001'), TITLE);
+				} 
+				// 2016/02/24 DA ins end
+				else {
+					// ログイン失敗
+					//Alert.show("従業員コードが違います。",TITLE);
+					Alert.show("従業員コードまたはパスワードが違います。",TITLE);
+				}
+			}
+			
+			// 2016/02/24 DA ins start
+			/**
+			 * パスワード変更が閉じられたときのイベント処理
+			 */
+			public function closeInputPassword(e:CloseEvent):void{
+				//OKが押下された場合だけ処理する。
+				if (e.detail != 1) {
+					return;
+				}
+
+				// マスタメンテナンスメニュー画面に遷移する
+				var request:URLRequest = new URLRequest("function_menu.html");
+				navigateToURL(request, "_self");
+			}
+
+			/**
+			 * 従業員コードを共通形式に自動変換する
+			 */
+			private function getUserCode():String
+			{
+				return StringUtil.trim(txtCode.text).toUpperCase();
+			}
+			// 2016/02/24 DA ins end
+
+			/**
+			 * 画面起動前の処理。
+			 */
+			protected function application1_preinitializeHandler(event:FlexEvent):void
+			{
+				resourceManager.localeChain = ["ja_JP"];
+			}
+			
+			/**
+			 * 画面起動時の処理
+			 */
+			protected function application1_creationCompleteHandler(event:FlexEvent):void
+			{
+				// 従業員コード入力欄をフォーカスする
+				// 現状うまく動作せず。。
+				//this.focusManager.setFocus(this.txtCode);
+				this.txtCode.setFocus();
+				// IMEをオフ
+				IME.enabled = false;
+			}
+
+			/**
+			 * 従業員コード入力欄でEnterキー押下時の処理。
+			 */
+			protected function txtCode_enterHandler(event:FlexEvent):void
+			{
+				// ログインボタンを押したことにする
+				button1_clickHandler(event);
+			}
+
+			/**
+			 * テキストフィールドにフォーカスが当たったときの処理
+			 */
+			protected function txtCode_focusInHandler(event:FocusEvent):void
+			{
+				// IMEをオフ。
+				// FlashPlayerのバージョンによっては、
+				// 勝手にIMEがオンになってしまうことがあるため。
+				IME.enabled = false;
+			}
+
+			/**
+			 * 言語選択
+			 */
+			/*
+			protected function ddlLanguage_changeHandler(event:IndexChangeEvent):void
+			{
+				if (this.ddlLanguage.selectedIndex == 0) {
+					resourceManager.localeChain = ["ja_JP"];
+				}
+				else if (this.ddlLanguage.selectedIndex == 1) {
+					resourceManager.localeChain = ["en_US"];
+				}
+				else {
+					resourceManager.localeChain = ["ja_JP"];
+				}
+			}
+			*/
+		]]>
+	</fx:Script>
+
+	<fx:Declarations>
+		<s:RemoteObject id="srv" destination="MUserService" result="srv_resultHandler(event)" />
+	</fx:Declarations>
+	<s:VGroup width="100%" height="100%"  fontFamily="ＭＳ ゴシック" verticalAlign="middle" horizontalAlign="center" >
+		<s:Label text="{resourceManager.getString('resource','cli0200001')}" width="100%" height="80" fontSize="32" horizontalCenter="0" verticalCenter="-103" verticalAlign="top" textAlign="center" textDecoration="none"/>
+
+		<s:HGroup width="100%" height="50" verticalAlign="middle" horizontalAlign="center">
+			<s:Label text="{resourceManager.getString('resource','cli0200002')}" fontSize="24" width="150" height="32" verticalAlign="middle"/>
+			<s:TextInput id="txtCode" width="216" height="32" fontSize="17" enter="txtCode_enterHandler(event)" focusIn="txtCode_focusInHandler(event)" />
+		</s:HGroup>
+		<s:HGroup width="100%" height="50" verticalAlign="middle" horizontalAlign="center">
+			<s:Label text="{resourceManager.getString('resource','cli0200003')}" fontSize="24" width="150" height="32" verticalAlign="middle"/>
+			<s:TextInput displayAsPassword="true" id="txtPass" width="216" height="32" fontSize="17" enter="txtCode_enterHandler(event)" focusIn="txtCode_focusInHandler(event)" />
+		</s:HGroup>
+		<s:HGroup width="100%" height="24">
+		</s:HGroup>
+		<s:Button label="{resourceManager.getString('resource','cli0200004')}" width="108" height="32" fontSize="16" click="button1_clickHandler(event)"/>
+
+		<!--言語のサンプル
+		<s:DropDownList id="ddlLanguage" change="ddlLanguage_changeHandler(event)" fontFamily="ＭＳ ゴシック" fontSize="20" tabIndex="0">
+			<mx:ArrayCollection>
+				<fx:String>日本語</fx:String>
+				<fx:String>English</fx:String>
+			</mx:ArrayCollection>		
+		</s:DropDownList>
+		-->
+	</s:VGroup>
+	</s:Application>

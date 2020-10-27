@@ -1,0 +1,24 @@
+<html>
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+	<title>誤欠品検出力向上ツール 指示記号マスタメンテナンス</title>
+	<script type="text/javascript">
+	<!--
+function winopen() {
+//	window.open('lfa_inspection_client/login_bcsign.html', 'gokeppin_bcsign', 'menubar=no, toolbar=no, location=no, status=no, resizable=yes, scrollbars=yes');
+	window.open('lfa_inspection_client/login.html', 'gokeppin', 'menubar=no, toolbar=no, location=no, status=no, resizable=yes, scrollbars=yes');
+}
+	//-->
+	</script>
+</head>
+
+<body onLoad="winopen()">
+
+<h2>誤欠品検出力向上ツール 指示記号マスタメンテナンス</h2>
+
+<br>
+
+<p>お気に入りに登録する場合、このページを登録してください。</p>
+
+</body>
+</html>

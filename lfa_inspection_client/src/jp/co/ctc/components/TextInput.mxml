@@ -1,0 +1,368 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!---
+ITAGE JYO 2013-04-16
+-->
+<s:MXAdvancedDataGridItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009"
+								  xmlns:s="library://ns.adobe.com/flex/spark"
+								  xmlns:mx="library://ns.adobe.com/flex/mx"
+								  focusEnabled="true"
+								  creationComplete="mxadvanceddatagriditemrenderer1_creationCompleteHandler(event)"
+								  dataChange="mxadvanceddatagriditemrenderer1_dataChangeHandler(event)"
+								  height="100%">
+
+	<fx:Script>
+		<![CDATA[
+			import jp.co.ctc.entity.MVehicle;
+			import jp.co.ctc.event.MasterRegistEvent;
+			import jp.co.ctc.util.MUserUtils;
+			import jp.co.ctc.util.Utils;
+			import jp.co.ctc.event.MstSelectEvent;
+
+			import mx.controls.AdvancedDataGrid;
+			import mx.controls.advancedDataGridClasses.AdvancedDataGridItemRenderer;
+			import mx.controls.advancedDataGridClasses.AdvancedDataGridListData;
+			import mx.events.FlexEvent;
+
+			import spark.components.Label;
+			import spark.components.TextInput;
+			import spark.events.TextOperationEvent;
+			import spark.layouts.HorizontalAlign;
+			import spark.components.supportClasses.ItemRenderer;
+			/**
+			 * 編集可のとき、テキストを表示
+			 */
+			protected var txtData:spark.components.TextInput;
+
+			/**
+			 * 編集不可のとき、ラベルを表示
+			 */
+			protected var lblData:spark.components.Label;
+
+			/**
+			 * ラベルの paddingLeftの値
+			 */
+			protected var LABEL_PADDING_LEFT:int = 4;
+
+			/**
+			 * テキストの paddingLeftの値
+			 */
+			protected var TEXT_PADDING_LEFT:int = 0;
+
+			/**
+			 * 該当テキストの初期化
+			 *
+			 */
+			override protected function createChildren():void
+			{
+				super.createChildren();
+
+				// 編集可のとき、テキストを表示
+				txtData = new spark.components.TextInput();
+				txtData.id = "txtData";
+				txtData.name = "txtData";
+				//txtData.height = 24;
+				//txtData.imeMode = flash.system.IMEConversionMode.ALPHANUMERIC_HALF; //2013/9/20 渡邊 GKP-002対応
+
+				// 編集不可のとき、ラベルを表示
+				lblData = new spark.components.Label();
+				lblData.id = "lblData";
+				lblData.name = "lblData";
+				//lblData.height =20;
+			}
+
+
+			/**
+			 * テキストの幅をリセットする
+			 *
+			 */
+			override protected function updateDisplayList(unscaledWidth:Number, unscaledHeight:Number):void{
+				super.updateDisplayList(unscaledWidth,unscaledHeight);
+
+				// テキストの幅をリセットする
+				txtData.width = dummyGroup.width - 2;
+
+			}
+
+			/**
+			 * 該当テキストの初期化
+			 *
+			 */
+			protected function mxadvanceddatagriditemrenderer1_creationCompleteHandler(event:FlexEvent):void
+			{
+				//
+			}
+
+			/**
+			 * データが変更したら、該当テキストを更新する
+			 *
+			 */
+			protected function mxadvanceddatagriditemrenderer1_dataChangeHandler(event:FlexEvent):void
+			{
+				//データがなければ、何もしない
+				if (this.listData == null) {
+					return;
+				}
+
+				if (this.data == null) {
+					return;
+				}
+
+				// テストをセットする
+				var ld:AdvancedDataGridListData = AdvancedDataGridListData(listData);
+				var field:String = ld.dataField;
+				var value:Object = ld.item[field];
+
+				// NULLの場合は、空白をセットする
+				this.txtData.text = value == null ? "" : value.toString();
+
+				this.lblData.text = value == null ? "" : value.toString();
+
+				// 2016/02/24 DA upd start
+				// 生産終了の場合、入力できないように設定する
+				if(this.data["endOfProd"] == true){
+					// 編集不可のとき、ラベルを表示
+					// 2016/08/26 DA upd start
+					//this.setUneditableText();
+					this.setDisabledText();
+					// 2016/08/26 DA upd end
+				}
+				else
+				{
+					// 本番マスタの場合、入力できないように設定する
+					if(parentApplication.hasOwnProperty("selectMst") && MstSelectEvent.isReal(parentApplication.selectMst)) {
+						// 編集不可のとき、ラベルを表示
+						this.setUneditableText();
+					}
+					else {
+						var reserve:jp.co.ctc.entity.MReserve = this.data["mReserve"];
+						// 予約情報がないの場合、入力できないように設定する
+						if (reserve == null) {
+							// 編集可のとき、テキストを表示
+							this.setEditableText();
+						}
+						else {
+							// 予約中（予約フラグ="0" or 予約フラグ="3" or 予約フラグ="4"）の場合、編集可にする
+							if (reserve.reserveFlag == "0" || reserve.reserveFlag == "3" || reserve.reserveFlag == "4"){
+								// 編集可のとき、テキストを表示
+								this.setEditableText();
+							}
+							// 予約中（予約フラグ="1"）の場合、入力できないように設定する
+							else if (reserve.reserveFlag == "1"){
+								// 編集不可のとき、ラベルを表示
+								this.setUneditableText();
+							}
+						}
+					}
+				// 2016/08/26 DA del start
+				//}
+				// 2016/08/26 DA del end
+
+					//ユーザー権限チェック
+					// 仮マスタ本番登録画面
+					// ※【注意】ここで活性にする場合は、すでに非活性であることの考慮を確認すること
+					if(parentApplication.className == "master_regist") {
+						if(parentApplication.hasOwnProperty("loginUserInfo")) {
+							// 検査員 OR 検査職制本番不可の場合
+							if(MUserUtils.isExaminer(parentApplication.loginUserInfo) || MUserUtils.OfficeOrganizationNot(parentApplication.loginUserInfo)) {
+								// 編集不可のとき、ラベルを表示
+								this.setUneditableText();
+							}
+							else if(MUserUtils.OfficeOrganization(parentApplication.loginUserInfo)) {
+								// 検査職制本番可の場合
+								// 仮0マスタ以外は不可
+								if(parentApplication.hasOwnProperty("selectMst") && MstSelectEvent.isTemporary0(parentApplication.selectMst) == false) {
+									// 編集不可のとき、ラベルを表示
+									this.setUneditableText();
+								}
+							}
+						}
+					}
+	
+	
+					// 指示記号の予約中の状態を取得、予約中の場合、ボタンを非活性にする。
+					if(this.data["bcsignReserve"] == true){
+						// 編集不可のとき、ラベルを表示
+						this.setUneditableText();
+					//	ItemRenderer(event.currentTarget).enabled = false;
+					//}
+					//else {
+					//	ItemRenderer(event.currentTarget).enabled = true;
+					}
+					// 2016/02/24 DA upd end
+
+				// 2016/08/26 DA ins start
+				}
+				// 2016/08/26 DA ins end
+			
+				// 2016/02/24 DA del start
+//				// いずれか切替組立連番、切替ボデーはデータがあれば、予約中の状態で、入力できないように設定する
+//				// 予約中の状態
+//				if(this.data["bookStatus"] == true){
+//					// 編集不可のとき、ラベルを表示
+//					if(this.dummyGroup.getChildByName("txtData") != null){
+//						txtData.removeEventListener(spark.events.TextOperationEvent.CHANGE, txtData_changeHandler);
+//						this.dummyGroup.removeElement(this.txtData);
+//					}
+//					if(this.dummyGroup.getChildByName("lblData") == null) {
+//						this.dummyGroup.addElement(this.lblData);
+//						this.dummyGroup.horizontalAlign = HorizontalAlign.LEFT;
+//						this.dummyGroup.paddingLeft = LABEL_PADDING_LEFT;
+//					}
+//				}
+//				else if(this.data["endOfProd"] == false)
+//				{
+//					// 編集不可のとき、テキストを表示
+//					if(this.dummyGroup.getChildByName("lblData") != null){
+//
+//						this.dummyGroup.removeElement(this.lblData);
+//					}
+//
+//					if(this.dummyGroup.getChildByName("txtData") == null) {
+//						this.dummyGroup.addElement(this.txtData);
+//						txtData.addEventListener(spark.events.TextOperationEvent.CHANGE, txtData_changeHandler);
+//						this.dummyGroup.horizontalAlign = HorizontalAlign.CENTER;
+//						this.dummyGroup.paddingLeft = TEXT_PADDING_LEFT;
+//					}
+//				}
+				// 2016/02/24 DA del end
+
+				// 桁数を制限する
+				// 切替組立連番は、半角英数3文字にする
+				if(field == "bcnoH0" )
+				{
+					txtData.maxChars = 3;
+					// 2016/08/18 DA upd start
+					//txtData.restrict = "0-9";
+					txtData.restrict = "A-Za-z0-9";
+					// 2016/08/18 DA upd end
+				}
+				// 切替ﾎﾞﾃﾞｰNOは、半角英数字5文字にする
+				else if(field == "bodyNo" )
+				{
+					txtData.maxChars = 5;
+					txtData.restrict = "A-Za-z0-9";
+				}
+				// 2016/02/24 DA ins start
+				else if(field == "line" )
+				{
+					txtData.maxChars = 1;
+					txtData.restrict = "A-Za-z0-9";
+				}
+				// 2016/02/24 DA ins end
+
+				// 2016/02/24 DA del start
+//				// 本番マスタ選択時は選択不可
+//				if (parentApplication.hasOwnProperty("selectMst") && parentApplication.selectMst == 1) {
+//
+//					// 編集不可のとき、ラベルを表示
+//					if(this.dummyGroup.getChildByName("txtData") != null){
+//						txtData.removeEventListener(spark.events.TextOperationEvent.CHANGE, txtData_changeHandler);
+//						this.dummyGroup.removeElement(this.txtData);
+//					}
+//
+//					if(this.dummyGroup.getChildByName("lblData") == null) {
+//						this.dummyGroup.addElement(this.lblData);
+//						this.dummyGroup.horizontalAlign = HorizontalAlign.LEFT;
+//						this.dummyGroup.paddingLeft = LABEL_PADDING_LEFT;
+//					}
+//				}
+				// 2016/02/24 DA del end
+
+			}
+			
+			
+			// 2016/08/26 DA upd start
+			// 2016/02/24 DA ins start
+
+			/**
+			 * 編集不可のとき、ラベルを表示、テキストを非表示
+			 *
+			 */
+			private function setDisabledText():void
+			{
+				// テキストを隠す
+				if(this.dummyGroup.getChildByName("txtData") != null){
+					txtData.removeEventListener(spark.events.TextOperationEvent.CHANGE, txtData_changeHandler);
+					this.dummyGroup.removeElement(this.txtData);
+				}
+				// ラベルを表す				
+				if(this.dummyGroup.getChildByName("lblData") == null){
+					this.dummyGroup.addElement(this.lblData);
+					this.dummyGroup.horizontalAlign = HorizontalAlign.LEFT;
+					this.dummyGroup.paddingLeft = LABEL_PADDING_LEFT;
+				}
+			}
+			/**
+			 * 編集可のとき、ラベルを非表示、テキストを編集可
+			 *
+			 */
+			private function setEditableText():void
+			{
+				// ラベルを隠す
+				if(this.dummyGroup.getChildByName("lblData") != null){
+					this.dummyGroup.removeElement(this.lblData);
+				}
+				// テキストを表す
+				if(this.dummyGroup.getChildByName("txtData") == null){
+					this.dummyGroup.addElement(this.txtData);
+					txtData.addEventListener(spark.events.TextOperationEvent.CHANGE, txtData_changeHandler);
+					this.dummyGroup.horizontalAlign = HorizontalAlign.CENTER;
+					this.dummyGroup.paddingLeft = TEXT_PADDING_LEFT;
+				}
+				this.txtData.enabled = true;
+			}
+			
+			/**
+			 * 編集不可のとき、ラベルを非表示、テキストを編集不可
+			 *
+			 */
+			private function setUneditableText():void
+			{
+				// ラベルを隠す
+				if(this.dummyGroup.getChildByName("lblData") != null){
+					this.dummyGroup.removeElement(this.lblData);
+				}
+
+				// テキストを表す
+				if(this.dummyGroup.getChildByName("txtData") == null){
+					this.dummyGroup.addElement(this.txtData);
+					txtData.addEventListener(spark.events.TextOperationEvent.CHANGE, txtData_changeHandler);
+					this.dummyGroup.horizontalAlign = HorizontalAlign.CENTER;
+					this.dummyGroup.paddingLeft = TEXT_PADDING_LEFT;
+				}
+				this.txtData.enabled = false;
+			}
+			// 2016/02/24 DA ins end
+			// 2016/08/26 DA upd end
+
+			/**
+			 * 切替組立連番 、切替ボデーNoのテストを更新すれば、AdvancedDataGridのデータを更新する
+			 *
+			 */
+			protected function txtData_changeHandler(event:TextOperationEvent):void
+			{
+				// 切替組立連番 、切替ボデーNoのテストを更新すれば、AdvancedDataGridのデータを更新する
+				var ld:AdvancedDataGridListData = AdvancedDataGridListData(listData);
+				var field:String = ld.dataField;
+				var value:Object = ld.item[field];
+				ld.item[field] = this.txtData.text;
+
+				//
+				// 編集有無チャック
+				var params:MVehicle = new MVehicle();
+				params.bctype = data["bctype"];
+				params.vehicleName = data["vehicleName"];
+				params.endOfProd = data["endOfProd"];
+				params.bcnoH0 = data["bcnoH0"];
+				params.bodyNo = data["bodyNo"];
+
+				// テキストが変更すれば、イベントを送信する
+				this.listData.owner.dispatchEvent(new MasterRegistEvent(MasterRegistEvent.InputTextChanged, listData.rowIndex, params));
+			}
+
+		]]>
+	</fx:Script>
+
+	<s:HGroup id="dummyGroup" name="dummyGroup" width="100%" height="24" textAlign="left" verticalAlign="middle" paddingRight="0" paddingTop="0" paddingBottom="0">
+	</s:HGroup>
+</s:MXAdvancedDataGridItemRenderer>

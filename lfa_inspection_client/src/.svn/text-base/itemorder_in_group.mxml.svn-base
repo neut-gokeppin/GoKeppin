@@ -1,0 +1,1005 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:mx="library://ns.adobe.com/flex/mx" pageTitle="誤欠品検出力向上ツール - 検査順マスタメンテナンス"
+			   creationComplete="application1_creationCompleteHandler(event)" minWidth="820">
+	<s:layout>
+		<s:VerticalLayout paddingLeft="8" paddingRight="8" paddingTop="8" paddingBottom="8" horizontalAlign="center" gap="8"/>
+	</s:layout>
+
+	<fx:Style source="lfa_inspection.css"/>
+
+	<!-- 2016/02/24 DA ins start -->
+	<fx:Metadata>
+		[ResourceBundle("message")]
+		[ResourceBundle("resource")]
+	</fx:Metadata>
+	<!-- 2016/02/24 DA ins end -->
+
+	<fx:Script>
+		<![CDATA[
+			import jp.co.ctc.components.InputRowDialog;
+			import jp.co.ctc.entity.MOrder;
+			import jp.co.ctc.entity.MUser;
+			import jp.co.ctc.entity.MVehicle;
+			import jp.co.ctc.event.MstSelectEvent;
+			import jp.co.ctc.util.MUserUtils;
+			import jp.co.ctc.util.Utils;
+			
+			import mx.collections.IList;
+			import mx.controls.Alert;
+			import mx.events.AdvancedDataGridEvent;
+			import mx.events.CloseEvent;
+			import mx.events.CollectionEvent;
+			import mx.events.CollectionEventKind;
+			import mx.events.DragEvent;
+			import mx.events.FlexEvent;
+			import mx.events.ListEvent;
+			import mx.events.ScrollEvent;
+			import mx.managers.PopUpManager;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+
+			private var rmenu:ContextMenu;
+			private var rmenuitem1:ContextMenuItem;
+			private var rmenuitem2:ContextMenuItem;
+			private var removedRows:ArrayCollection = new ArrayCollection();
+			private var TITLE:String = "検査順マスタメンテナンス";
+			private var updExists:Boolean = false;
+
+			private var timer:Timer;
+			private var iList:IList;
+			private var idx:int;
+			private var dir:int;
+			private var gridTarget:AdvancedDataGrid;
+
+			private var oldList:Array;
+			private var targetList:IList;
+			private var moveItems:Array;
+			private var rmenuIndex:int = -1;
+
+			// 編集中の車種区分を保持する変数
+			private var editBctype:String = "";
+
+			// メニュー&ログイン画面から選択されたマスタ、従業員コードを取得するように修正する
+			public var selectMst:int = 0;
+			public var loginUser:String = "";
+
+			// Drag&Dropを開始したDataGrid
+			private var dragStartGrid:AdvancedDataGrid;
+
+			// 2016/02/24 DA ins start
+			private var modeContextMenu:int = 0;	// 右クリックメニューの状態（0:使用不可、1:使用可）
+			public var gridLScrollPosition:int = 0;	// 表示行のインデックス
+			public var gridRScrollPosition:int = 0;	// 表示行のインデックス
+			public var loginUserInfo:MUser; //ログインユーザ情報
+			// 2016/02/24 DA ins end
+
+			/**
+			 * アプリケーション初期化
+			 * ユーザーコードの取得
+			 */
+			protected function application1_creationCompleteHandler(event:FlexEvent):void
+			{
+				// Debug用 ****************************************
+				//　Debugログインさせ、ログインが行われたようにする。
+				//srvUser.login("CJ00900");
+				//srvUser.setSelectMst(0);
+
+				//ドラッグ時スクロール用の値設定
+				timer = new Timer(300);
+				timer.addEventListener(TimerEvent.TIMER,onTimerTick);
+				idx = 0;
+				dir = 0;
+
+				//ユーザーコードを取得
+				srvUser.getUserCode();
+
+				// 車種マスタを取得
+				srvVehicle.getMVehicle();
+
+				// Alertのボタンの幅を変更
+				// デフォルトの60だと"キャンセル"の文字が表示しきれない。
+				Alert.buttonWidth = 100;
+			}
+
+			/**
+			 * ユーザーコードの取得後の処理。
+			 * ユーザーコードを持っていなければログイン画面に戻します。
+			 */
+			protected function getUserCode_resultHandler(event:ResultEvent):void
+			{
+				//ユーザコードがなければログインページに戻す
+				if (event.result==null) {
+					var request:URLRequest = new URLRequest("login.html");
+					navigateToURL(request, "_self");
+				}
+				else{
+					this.loginUser = event.result.toString();
+					//セレクトマスタを取得
+					srvUser.getSelectMst();
+
+					// 2016/02/24 DA ins start
+					// ログインユーザ情報を取得
+					srvUser.getMUser(this.loginUser);
+					// 2016/02/24 DA ins end
+				}
+			}
+
+			/**
+			 * セレクトマスタの取得後の処理。
+			 * 選択したマスタに対応した表示・処理を行います。
+			 */
+			protected function getSelectMst_resultHandler(event:ResultEvent):void
+			{
+				selectMst = parseInt(event.result.toString());
+
+				// 2016/02/24 DA upd start
+				selectMst_Label.text = MstSelectEvent.getMasterName(selectMst);
+
+				//if (selectMst==1) {
+				if (MstSelectEvent.isReal(selectMst)) {
+				// 2016/02/24 DA upd end
+
+					// 2016/02/24 DA del start
+//					selectMst_Label.text = "本番";
+					// 2016/02/24 DA del end
+					btnSaveData.enabled = false;
+					gridL.editable = "false";
+					gridL.dropEnabled=false ;
+					gridR.editable = "false";
+					gridR.dropEnabled=false ;
+				} else {
+
+					// 2016/02/24 DA del start
+//					selectMst_Label.text = "仮";
+					// 2016/02/24 DA del end
+					btnSaveData.enabled = true;
+					gridL.editable = "true";
+					gridL.dropEnabled=true ;
+					gridR.editable = "true";
+					gridR.dropEnabled=true ;
+
+					// 2016/02/24 DA del start
+//					// コンテキストメニューの作成
+//					rmenu = new ContextMenu();
+//					rmenu.hideBuiltInItems();
+//					rmenu.addEventListener(ContextMenuEvent.MENU_SELECT, rmenu_menuSelectHandler);
+//					rmenuitem1 = new ContextMenuItem("挿入先を指定");
+//					rmenuitem1.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, showDialogHandler);
+//					rmenu.customItems.push(rmenuitem1);
+					// 2016/02/24 DA del end
+				}
+				// グループマスタの取得
+				srv.getMGroupNames(selectMst);
+			}
+
+			/**
+			 * 右クリックメニュー表示時の処理
+			 */
+			private function rmenu_menuSelectHandler(event:ContextMenuEvent):void {
+				// 右クリックされた行を保持しておく
+				if (-1 < rmenuIndex && rmenuIndex < targetList.length) {
+					moveItems = new Array();
+					moveItems.push(targetList.getItemAt(rmenuIndex) as MOrder);
+				} else {
+					moveItems = null;
+				}
+			}
+
+			/**
+			 * 「挿入先を指定」選択時の処理
+			 */
+			private function showDialogHandler(event:ContextMenuEvent):void {
+				// 行選択チェック
+				if (moveItems == null) {
+					Alert.show("挿入先を指定したい行を右クリックしてください", TITLE);
+					return;
+				}
+				var moveItem:MOrder = moveItems[0];
+				//入力用ダイアログの表示
+				var dialog:InputRowDialog = PopUpManager.createPopUp(this,InputRowDialog,true) as InputRowDialog;
+				dialog.addEventListener(CloseEvent.CLOSE,closeWindow);
+				dialog.setItemname(moveItem.mItem.itemName);
+				PopUpManager.centerPopUp(dialog);
+				dialog.input.setFocus();
+			}
+
+			/**
+			 * 入力ウィンドウが閉じられたときのイベント処理
+			 */
+			public function closeWindow(e:CloseEvent):void{
+				if (e.detail == 1) {
+					//OKが押下された場合だけ処理する。
+					var inOrder:int = int(e.target.getOrder());
+					if (inOrder > 0) {
+						//入力された値が正の数の場合だけ入れ替え処理を行う。
+
+						//現在の状態を保存
+						oldList = targetList.toArray();
+						var moveItem:MOrder = moveItems[0];
+
+						//選択した項目を一度削除する。
+						var idx:int = targetList.getItemIndex(moveItem);
+						targetList.removeItemAt(idx);
+						//挿入先を求める
+						var orderCnt:int = 1;
+						for (idx = 0; idx < targetList.length; idx++) {
+							var listItem:MOrder = targetList.getItemAt(idx) as MOrder;
+							if (listItem.inspecOrder != 0) {
+								//取り出し順が０のものは考慮しない
+								if (orderCnt == inOrder) {
+									//現在の順番と指定された順番が等しければループを抜ける
+									break;
+								}
+								//現在の順番を加算
+								orderCnt++;
+							}
+						}
+						if (idx < targetList.length) {
+							targetList.addItemAt(moveItem,idx);
+						} else {
+							targetList.addItem(moveItem);
+						}
+					} else {
+						Alert.show("値は1以上の整数で入力してください", TITLE);
+					}
+				}
+			}
+			/**
+			 * グリッド上のデータにマウスが乗ったときの処理。
+			 */
+			protected function grid_itemRollOverHandler(event:ListEvent):void
+			{
+				// マウスカーソルの乗っている行を保持しておく。
+				// 右クリックで使用する
+				rmenuIndex = event.rowIndex;
+				// DragしたGridを保持
+				dragStartGrid = event.target as AdvancedDataGrid;
+				targetList = dragStartGrid.dataProvider as IList
+			}
+			//*************************************************************
+			// グループCombo Event
+			//*************************************************************
+
+			/**
+			 * グループ取得失敗時の処理。
+			 */
+			private function onGroupFault(e:FaultEvent):void
+			{
+				Alert.show("グループマスタの取得に失敗しました。",TITLE);
+			}
+
+			//*************************************************************
+			// 検査順Grid Event
+			//*************************************************************
+			/**
+			 * 検査順データ更新正常終了時の処理。
+			 */
+			private function onOrderResult(e:ResultEvent):void
+			{
+				Alert.show("保存しました。",TITLE);
+			}
+
+			/**
+			 * 検査順データ更新失敗時の処理。
+			 */
+			private function onOrderFault(e:FaultEvent):void
+			{
+				Alert.show("データの更新に失敗しました。",TITLE);
+			}
+
+			/**
+			 * 左ハンドル検査順Data取得失敗時の処理。 (MOrder or TOrder)
+			 */
+			private function onOrderLFault(e:FaultEvent):void
+			{
+				Alert.show("左ハンドル用のデータ取得に失敗しました。",TITLE);
+			}
+
+			/**
+			 * 右ハンドル検査順Data取得失敗時の処理。 (MOrder or TOrder)
+			 */
+			private function onOrderRFault(e:FaultEvent):void
+			{
+				Alert.show("右ハンドル用のデータ取得に失敗しました。",TITLE);
+			}
+
+
+
+			//*************************************************************
+			// ボタン Event
+			//*************************************************************
+
+			/**
+			 * 検索ボタン押下時の処理。
+			 */
+			protected function btnGetData_clickHandler(event:MouseEvent):void
+			{
+				// 車種選択チェック
+				if (ddlVehicle.selectedItem == null) {
+					Alert.show("車種を選択してください", TITLE);
+					return;
+				}
+
+				// 工程選択チェック
+				if(groupList.selectedItem==null){
+					Alert.show("工程を選択してください", TITLE);
+					return;
+				}
+
+				// 2016/02/24 DA del start
+				//editBctype = (ddlVehicle.selectedItem as MVehicle).bctype
+				// 2016/02/24 DA del end
+
+				if(updExists==true){
+					Alert.show("変更が保存されていません。\n検索すると変更が破棄されます。よろしいですか？", TITLE,
+						Alert.OK | Alert.CANCEL, this,
+						function(event:CloseEvent):void {
+							if (event.detail == Alert.OK) {
+								itemDataGet();
+							}
+						},
+						// 2016/08/29 DA ins start
+						null,
+						Alert.CANCEL
+						// 2016/08/29 DA ins end
+					);
+				} else {
+					itemDataGet();
+				}
+			}
+
+
+			/**
+			 * 工程一覧を取得（removedRowsの初期化も同時に行う）
+			 */
+			protected function itemDataGet():void
+			{
+				// 2016/02/24 DA upd start
+				// 車種を取得
+				editBctype = (ddlVehicle.selectedItem as MVehicle).bctype;
+
+				if (MstSelectEvent.isTemporary(selectMst)) {
+					// 車種の予約フラグを取得
+					srvMstRegist.isReservedMVehicle(selectMst, editBctype);
+				}
+				else {
+					modeContextMenu = 0;
+					getItemData();
+				}
+				// 2016/02/24 DA upd end
+			}
+
+			// 2016/02/24 DA ins start
+			/**
+			 * 表示するデータを取得
+			 */
+			private function getItemData():void
+			{
+				// データ取得
+				orderSrvL.getMOrders(selectMst, null, editBctype, groupList.selectedItem, "1");
+				orderSrvR.getMOrders(selectMst, null, editBctype, groupList.selectedItem, "2");
+
+				// 変更をクリア
+				updExists = false;
+				
+				// 2016/09/09 DA ins start
+				this.gridLScrollPosition = this.gridL.verticalScrollPosition;
+				this.gridL.initialize();
+				this.gridL.dataProvider.refresh();
+				
+				this.gridRScrollPosition = this.gridR.verticalScrollPosition;
+				this.gridR.initialize();
+				this.gridR.dataProvider.refresh();
+				// 2016/09/09 DA ins end
+			}
+
+			/**
+			 * 車種の予約フラグ取得成功時の処理
+			 */
+			protected function isReservedMVehicle_resultHandler(event:ResultEvent):void
+			{
+				var blnOn:Boolean = false;
+				
+				if (event.result != null && event.result) {
+					blnOn = false;
+				}
+				else {
+					if (MUserUtils.isAdministrator(this.loginUserInfo)) {
+						// マスタ管理者
+						if (MstSelectEvent.isReal(selectMst)) {
+							blnOn = false;
+						} else {
+							blnOn = true;
+						}
+						
+					} else {
+						// 以外
+						blnOn = false;
+					}
+				}
+				if (blnOn) {
+					btnSaveData.enabled = true;
+					gridL.editable = "true";
+					gridL.dropEnabled=true ;
+					gridR.editable = "true";
+					gridR.dropEnabled=true ;
+					modeContextMenu = 1;
+					
+					// コンテキストメニューの作成
+					rmenu = new ContextMenu();
+					rmenu.hideBuiltInItems();
+					rmenu.addEventListener(ContextMenuEvent.MENU_SELECT, rmenu_menuSelectHandler);
+					rmenuitem1 = new ContextMenuItem("挿入先を指定");
+					rmenuitem1.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, showDialogHandler);
+					rmenu.customItems.push(rmenuitem1);
+				} else {
+					// 予約の場合は保存ボタンを非活性する
+					btnSaveData.enabled = false;
+					gridL.editable = "false";
+					gridL.dropEnabled=false ;
+					gridR.editable = "false";
+					gridR.dropEnabled=false ;
+					modeContextMenu = 0;
+				}
+				getItemData();
+			}
+			// 2016/02/24 DA ins end
+
+			/**
+			 * 保存ボタン押下時の処理。
+			 */
+			protected function btnSaveData_clickHandler(event:MouseEvent):void
+			{
+				// 変更有無チェック
+				if (updExists==false) {
+					Alert.show("保存する内容がありません", TITLE);
+					return;
+				}
+
+				// 2016/02/24 DA ins start
+				// 予約中チェック
+				srvMstRegistSave.isReservedMVehicle(selectMst, editBctype);
+				// 2016/02/24 DA ins end
+			}
+
+			/**
+			 * 保存ボタン押下時の処理（チェック後の処理）
+			 */
+			protected function save_isReservedMVehicle_resultHandler(event:ResultEvent):void
+			{
+				// 2016/02/24 DA ins start
+				if (event.result != null && event.result) {
+					// 予約されているため、保存することができません。
+					Alert.show(resourceManager.getString('message','msg00023'), TITLE);
+					return;
+				}
+				// 2016/02/24 DA ins end
+
+				// 2016/02/24 DA del start
+				//// 編集チェック
+				//if (updExists==false) {
+				//	Alert.show("保存する内容がありません。",
+				//		TITLE);
+				//	return;
+				//}
+				// 2016/02/24 DA del end
+
+				// 2016/02/24 DA ins start
+				// 表示行を一時退避する
+				this.gridLScrollPosition = this.gridL.verticalScrollPosition;
+				this.gridRScrollPosition = this.gridR.verticalScrollPosition;
+				// 2016/02/24 DA ins end
+
+				orderSrv.updateAll(acOL, acOR, loginUser);
+
+				// 最新データ取得
+				itemDataGet();
+			}
+
+			/**
+			 * 終了ボタン押下時の処理。
+			 */
+			private function btnExit_clickHandler(event:MouseEvent):void{
+
+				// 本番マスタ選択時は確認不要
+				// 2016/02/24 DA upd start
+//				if (selectMst == 1) {
+				if (MstSelectEvent.isReal(selectMst)) {
+				// 2016/02/24 DA upd end
+					// Browserを閉じる
+					close();
+					return;
+				}
+
+				if (updExists==true) {
+					// 編集あり
+					Alert.show("変更が保存されていません。\n終了すると変更が破棄されます。よろしいですか？",
+						TITLE,
+						Alert.OK | Alert.CANCEL, this,
+						function(event:CloseEvent):void {
+							if (event.detail == Alert.OK) {
+								// Browserを閉じる
+								close();
+							}
+						},
+						// 2016/08/29 DA ins start
+						null,
+						Alert.CANCEL
+						// 2016/08/29 DA ins end
+					);
+					return;
+				}
+
+				// メニュー画面に戻る
+				close();
+			}
+
+
+			/**
+			 * ユーザーによる変更があったかどうかをチェックします。
+			 * 【戻り値】true:変更あり、false:変更なし
+			 */
+			private function existsUpdate():Boolean
+			{
+				// 追加、変更有無チェック
+				if (updExists == false) {
+					// 変更あり
+					return true;
+				}
+
+				// 変更なし
+				return false;
+			}
+
+			/**
+			 * 表示された画面を閉じ、ページ遷移を行います。
+			 */
+			private function close():void
+			{
+				// マスタメンテナンスメニュー画面に遷移する
+				var request:URLRequest = new URLRequest("master_menu.html");
+				navigateToURL(request, "_self");
+			}
+
+
+			//*************************************************************
+			// Grid表示データ取得
+			//*************************************************************
+
+			/**
+			 * DataGridの項目名カラムに値をバインドする
+			 */
+			private function itemNameColumnFunction(mOrder:Object, column:AdvancedDataGridColumn):String {
+				return mOrder.mItem.itemName;
+			}
+
+			/**
+			 * DataGridのMsgNoカラムに値をバインドする
+			 */
+			private function msgNoColumnFunction(mOrder:Object, column:AdvancedDataGridColumn):String {
+				return mOrder.mItem.msgNo;
+			}
+
+
+			//*************************************************************
+			// Drag&Drop Event
+			//*************************************************************
+			//
+			// 異なるGridの間のDrag&Dropをできないように制御する。
+			//
+
+			/**
+			 *  Drag開始時の処理
+			 */
+			private function doDragStart(event:DragEvent):void {
+
+				///並べ替え前の順序を保持しておく。
+				oldList = targetList.toArray();
+				gridTarget = event.currentTarget as AdvancedDataGrid;
+				moveItems = gridTarget.selectedItems;
+			}
+
+			/**
+			 * Drop時の処理 (Drop側Component)
+			 */
+			private function doDragDrop(event:DragEvent):void {
+				//コントロールキーを押している場合は処理を中断する
+				if (event.ctrlKey) {
+					event.preventDefault();
+				}
+
+				if(event.target != dragStartGrid) {
+					// DragしたGridとDropしたGridが異なる場合はDrag&Dropをキャンセルする
+					event.preventDefault();
+
+					var ad:AdvancedDataGrid = event.target as AdvancedDataGrid;
+					// 下記関数をCallしないとDrag&Dropキャンセル時にGrid(Drop位置)に黒線が残る。
+					ad.hideDropFeedback(event);
+					Alert.show("異なるGridにはDropできません。",TITLE)
+
+				}
+
+			}
+
+			/**
+			 *  Drop時の処理 (Drag側Component)
+			 */
+			private function doDragComplete(event:DragEvent):void {
+				if(event.target != event.relatedObject) {
+					// DragしたGridとDropしたGridが異なる場合はDrag&Dropをキャンセルする
+					// event.relatedObject->DropしたComponent
+					// event.targetにDrag->Component
+					event.preventDefault();
+
+				}
+				if (timer.running) {
+					timer.stop();
+					dir = 0;
+				}
+			}
+
+			/**
+			 * コンポーネント外へドラッグしたときの処理
+			 *  ctrlキーが押されていた場合は処理を無効化します。
+			 */
+			protected function grid_dragExitHandler(event:DragEvent):void
+			{
+				gridTarget = event.currentTarget as AdvancedDataGrid;
+				iList = gridTarget.dataProvider as IList;
+				idx = iList.getItemIndex(gridTarget.firstVisibleItem);
+				if (event.localY < 0) {
+					dir = -1;
+				}
+				if (event.localY > gridTarget.height) {
+					dir = 1;
+				}
+				timer.start();
+			}
+
+			/**
+			 * コンポーネント内へドラッグしたときの処理
+			 *  ctrlキーが押されていた場合は処理を無効化します。
+			 */
+			protected function grid_dragEnterHandler(event:DragEvent):void
+			{
+				if (timer.running) {
+					timer.stop();
+					dir = 0;
+				}
+			}
+
+			/**
+			 * タイマーイベント
+			 *
+			 */
+			protected function onTimerTick(event:TimerEvent):void
+			{
+				idx = idx + dir;
+				if (idx >= 0 && idx < iList.length) {
+					gridTarget.firstVisibleItem = iList.getItemAt(idx);
+				} else {
+					idx = idx - dir;
+				}
+			}
+
+			//*************************************************************
+			// 検査順の採番
+			//*************************************************************
+			/**
+			 *  検査順更新(左ハンドル)
+			 */
+			protected function acOL_collectionChangeHandler(event:CollectionEvent):void
+			{
+				switch(event.kind) {
+					case CollectionEventKind.RESET:
+						// 右クリックメニューをセット
+						// 2016/02/24 DA upd start
+						if (modeContextMenu == 0 || acOL.length == 0) {
+							gridL.contextMenu = null;
+						}
+						else {
+							gridL.contextMenu = rmenu;
+						}
+						// 2016/02/24 DA upd end
+
+						// 2016/02/24 DA ins start
+						this.gridL.verticalScrollPosition = this.gridLScrollPosition;
+						// 2016/02/24 DA ins end
+						// 2016/09/09 DA ins start			
+						this.gridL.initialize();
+						this.gridL.dataProvider.refresh();
+						// 2016/09/09 DA ins end			
+
+						break;
+					case CollectionEventKind.ADD:
+						// 検査順の採番
+						renumGroupNo(acOL);
+						// データ更新あり
+						updExists = true;
+						break;
+					case CollectionEventKind.REMOVE:
+						// 検査順の採番
+						//renumGroupNo(acOL);
+						// データ更新あり
+						//updExists = true;
+						break;
+				}
+			}
+
+			/**
+			 *  検査順更新(右ハンドル)
+			 */
+			protected function acOR_collectionChangeHandler(event:CollectionEvent):void
+			{
+				switch(event.kind) {
+					case CollectionEventKind.RESET:
+						// 右クリックメニューをセット
+						// 2016/02/24 DA upd start
+						if (modeContextMenu == 0 || acOR.length == 0) {
+							gridR.contextMenu = null;
+						}
+						else {
+							gridR.contextMenu = rmenu;
+						}
+						// 2016/02/24 DA upd end
+
+						// 2016/02/24 DA ins start
+						this.gridR.verticalScrollPosition = this.gridRScrollPosition;
+						// 2016/02/24 DA ins end
+						// 2016/09/09 DA ins start			
+						this.gridR.initialize();
+						this.gridR.dataProvider.refresh();
+						// 2016/09/09 DA ins end			
+
+						break;
+					case CollectionEventKind.ADD:
+						// 検査順の採番
+						renumGroupNo(acOR);
+						// データ更新あり
+						updExists = true;
+						break;
+					case CollectionEventKind.REMOVE:
+						// 検査順の採番
+						//renumGroupNo(acOR);
+						// データ更新あり
+						//updExists = true;
+						break;
+				}
+			}
+
+
+			/**
+			 * 検査順をグリッドの先頭から順に割り振る。
+			 */
+			private function renumGroupNo(ac:IList):void {
+				/*
+				var mOrder:MOrder;
+
+				for (var loop_cnt:int =1;loop_cnt <= ac.length; loop_cnt++) {
+				mOrder = ac[loop_cnt-1];
+				mOrder.inspecOrder = loop_cnt;
+				mOrder.updateUser = loginUser;
+				}
+				*/
+
+				var mOrder:MOrder;
+				var setOrder:int = 1;
+
+				for (var loop_cnt:int =0;loop_cnt < ac.length; loop_cnt++) {
+					mOrder = ac[loop_cnt];
+					if (mOrder.inspecOrder != 0 || checkMoveCode(mOrder.itemCode)) {
+						mOrder.inspecOrder = setOrder;
+						mOrder.updateUser = loginUser;
+						setOrder++;
+					}
+				}
+			}
+
+			private function checkMoveCode(itemCode:int):Boolean {
+				for (var idx:int = 0; idx < moveItems.length; idx++) {
+					var item:MOrder = moveItems[idx];
+					if (itemCode == item.itemCode) {
+						return true;
+					}
+				}
+				return false;
+			}
+
+
+			/**
+			 * DataGridの項目への編集開始イベント。
+			 *
+			 * 挿入先指定ダイアログを表示する際にエラーが発生するのを回避するため、
+			 * 検査順カラムを編集可能にして編集イベントをキャンセルする。
+			 *
+			 * ※検査順カラムを編集不可にするとエラー発生するようになるので注意
+			 * （なぜ編集不可だとエラーになるのかは不明）
+			 */
+			protected function gridL_itemEditBeginHandler(event:AdvancedDataGridEvent):void
+			{
+				// TODO Auto-generated method stub
+				event.preventDefault();
+			}
+
+			// 2016/02/24 DA ins start
+			protected function getMUser_resultHandler(event:ResultEvent):void {
+				this.loginUserInfo = event.result as MUser;
+				this.enabledComponent();
+			}
+			
+			/**
+			 * コンポーネントの制御をする
+			 */
+			private function enabledComponent():void
+			{
+				if (MUserUtils.isAdministrator(this.loginUserInfo)) {
+					// マスタ管理者
+					if (MstSelectEvent.isReal(selectMst)) {
+						// 2016/08/16 DA upd start
+//						this.gridL.enabled = false;
+//						this.gridR.enabled = false;
+						this.gridL.editable = "false";
+						this.gridR.editable = "false";
+						// 2016/08/16 DA upd end
+						this.btnSaveData.enabled = false;
+					} else {
+						// 2016/08/16 DA upd start
+//						this.gridL.enabled = true;
+//						this.gridR.enabled = true;
+						this.gridL.editable = "true";
+						this.gridR.editable = "true";
+						// 2016/08/16 DA upd end
+						this.btnSaveData.enabled = true;
+					}
+
+				} else {
+					// 以外
+					// 2016/08/16 DA upd start
+//					this.gridL.enabled = false;
+//					this.gridR.enabled = false;
+					this.gridL.editable = "false";
+					this.gridR.editable = "false";
+					// 2016/08/16 DA upd end
+					this.btnSaveData.enabled = false;
+				}
+			}
+			// 2016/02/24 DA ins end
+
+			// 2016/02/24 DA ins start
+			/**
+			 * スクロール時に正しいデータを表示する
+			 */
+			protected function gridL_scrollHandler(event:ScrollEvent):void
+			{
+				this.gridLScrollPosition = this.gridL.verticalScrollPosition;
+				// 2016/09/09 DA del start
+//				var i:int;
+//				for (i=0; i<acOL.length; i++) {
+//					this.gridL.scrollToIndex(i);
+//				}
+//				this.gridL.scrollToIndex(gridLScrollPosition);
+//				acOL.refresh();
+				// 2016/09/09 DA del end
+			}
+			/**
+			 * スクロール時に正しいデータを表示する
+			 */
+			protected function gridR_scrollHandler(event:ScrollEvent):void
+			{
+				this.gridRScrollPosition = this.gridR.verticalScrollPosition;
+				// 2016/09/09 DA del start
+//				var i:int;
+//				for (i=0; i<acOR.length; i++) {
+//					this.gridR.scrollToIndex(i);
+//				}
+//				this.gridR.scrollToIndex(gridRScrollPosition);
+//				acOR.refresh();
+				// 2016/09/09 DA del end
+			}
+			// 2016/02/24 DA ins end
+
+		]]>
+
+	</fx:Script>
+
+
+	<fx:Declarations>
+		<!-- 非ビジュアルエレメント (サービス、値オブジェクトなど) をここに配置 -->
+		<s:RemoteObject id="srv" destination="MGroupService" fault="onGroupFault(event)"/>
+
+		<s:RemoteObject id="orderSrvL" destination="MOrderService" fault="onOrderLFault(event)"/>
+		<s:RemoteObject id="orderSrvR" destination="MOrderService" fault="onOrderRFault(event)"/>
+		<s:RemoteObject id="orderSrv" destination="MOrderService" result="onOrderResult(event)" fault="onOrderFault(event)"/>
+
+		<s:RemoteObject id="srvVehicle" destination="MVehicleService">
+			<s:method name="getMVehicle" fault="onOrderFault(event)"/>
+		</s:RemoteObject>
+
+		<s:RemoteObject id="srvUser" destination="MUserService">
+			<s:method name="getUserCode" result="getUserCode_resultHandler(event)"/>
+			<s:method name="getSelectMst" result="getSelectMst_resultHandler(event)"/>
+			<s:method name="getMUser" result="getMUser_resultHandler(event)"/>
+		</s:RemoteObject>
+
+		<!-- 2016/02/24 DA ins start -->
+		<s:RemoteObject id="srvMstRegist" destination="mstRegistService">
+			<s:method name="isReservedMVehicle" result="isReservedMVehicle_resultHandler(event)" />
+		</s:RemoteObject>
+		<s:RemoteObject id="srvMstRegistSave" destination="mstRegistService">
+			<s:method name="isReservedMVehicle" result="save_isReservedMVehicle_resultHandler(event)" />
+		</s:RemoteObject>
+		<!-- 2016/02/24 DA ins end -->
+
+		<s:ArrayCollection id="acOL"  collectionChange="acOL_collectionChangeHandler(event)" list="{gridL.dataProvider as IList}" />
+		<s:ArrayCollection id="acOR"  collectionChange="acOR_collectionChangeHandler(event)" list="{gridR.dataProvider as IList}" />
+
+	</fx:Declarations>
+	<s:HGroup width="100%" height="24" verticalAlign="middle" fontFamily="ＭＳ ゴシック">
+		<s:Label text="検査順マスタメンテナンス" height="24" fontSize="14" fontWeight="bold"/>
+	</s:HGroup>
+	<s:HGroup width="100%" height="32">
+		<s:HGroup width="45%" height="24" textAlign="left" verticalAlign="middle">
+			<s:Label text="車種："/>
+			<s:DropDownList id="ddlVehicle" dataProvider="{srvVehicle.getMVehicle.lastResult}" labelField="vehicleName"></s:DropDownList>
+			<mx:Spacer width="16" height="100%"/>
+			<s:Label text="工程：" />
+			<s:DropDownList id="groupList"
+							dataProvider="{srv.getMGroupNames.lastResult}" labelField="groupName" width="180"></s:DropDownList>
+			<mx:Spacer width="16" height="100%"/>
+			<s:Button label="検索" height="30" id="btnGetData" click="btnGetData_clickHandler(event)"/>
+		</s:HGroup>
+		<s:HGroup width="35%" height="24" verticalAlign="middle">
+			<s:Label text="背景色がグリーンの行は、順番が未設定の検査項目を表します"/>
+		</s:HGroup>
+		<s:HGroup width="20%" height="24" fontFamily="ＭＳ ゴシック" horizontalAlign="right" verticalAlign="middle">
+			<s:Label text="マスタ選択" textAlign="right"/>
+			<s:Label text="仮" fontWeight="bold" id="selectMst_Label"/>
+		</s:HGroup>
+	</s:HGroup>
+	<s:HGroup width="100%" height="16" verticalAlign="middle">
+		<s:HGroup width="50%" horizontalAlign="center" verticalAlign="middle">
+			<s:Label text="[ 左Ｈ ]" fontSize="14"/>
+		</s:HGroup>
+		<s:HGroup width="50%" horizontalAlign="center" verticalAlign="middle">
+			<s:Label text="[ 右Ｈ ]" fontSize="14"/>
+		</s:HGroup>
+	</s:HGroup>
+	<s:HGroup width="100%" height="100%">
+		<mx:AdvancedDataGrid id="gridL" designViewDataType="flat" rowCount="20" width="100%" height="100%"
+							 allowMultipleSelection="true" dragMoveEnabled="true" dataProvider="{orderSrvL.getMOrders.lastResult}"
+							 dragEnabled="true"  dropEnabled="true" dragEnter="grid_dragEnterHandler(event)" dragExit="grid_dragExitHandler(event)"
+							 dragStart="doDragStart(event)" dragComplete="doDragComplete(event)" dragDrop="doDragDrop(event)" editable="false"  sortExpertMode="true"
+							 itemRollOver="grid_itemRollOverHandler(event)" itemEditBegin="gridL_itemEditBeginHandler(event)"
+							 scroll="gridL_scrollHandler(event)">
+			<mx:columns>
+				<mx:AdvancedDataGridColumn headerText="検査順" dataField="inspecOrder" editable="true" sortable="false" itemRenderer="jp.co.ctc.components.ZeroOrderItemRenderer" width="35"/>
+				<mx:AdvancedDataGridColumn headerText="項目No." dataField="itemCode" editable="false" sortable="false" itemRenderer="jp.co.ctc.components.ZeroOrderItemRenderer" width="40"/>
+				<mx:AdvancedDataGridColumn headerText="MsgNo" itemRenderer="jp.co.ctc.components.ZeroOrderItemRenderer" width="30" labelFunction="msgNoColumnFunction" sortable="false"/>
+				<mx:AdvancedDataGridColumn headerText="項目名" labelFunction="itemNameColumnFunction" editable="false" sortable="false" itemRenderer="jp.co.ctc.components.ZeroOrderItemRenderer" width="115"/>
+				<mx:AdvancedDataGridColumn headerText="更新者" sortable="false" dataField="updateUser" labelFunction="Utils.updateUserToLabel" itemRenderer="jp.co.ctc.components.ZeroOrderItemRenderer" width="50"/>
+				<mx:AdvancedDataGridColumn headerText="更新日" dataField="updateDate" labelFunction="Utils.updateDateToLabel" itemRenderer="jp.co.ctc.components.ZeroOrderItemRenderer" sortable="false" width="80"/>
+			</mx:columns>
+		</mx:AdvancedDataGrid>
+		<mx:AdvancedDataGrid id="gridR" designViewDataType="flat" rowCount="20" width="100%" height="100%"
+							 allowMultipleSelection="true" dragMoveEnabled="true" dataProvider="{orderSrvR.getMOrders.lastResult}"
+							 dragEnabled="true"  dropEnabled="true" dragEnter="grid_dragEnterHandler(event)" dragExit="grid_dragExitHandler(event)"
+							 dragStart="doDragStart(event)" dragComplete="doDragComplete(event)" dragDrop="doDragDrop(event)" editable="false"  sortExpertMode="true"
+							 itemRollOver="grid_itemRollOverHandler(event)" itemEditBegin="gridL_itemEditBeginHandler(event)"
+							 scroll="gridR_scrollHandler(event)">
+			<mx:columns>
+				<mx:AdvancedDataGridColumn headerText="検査順" dataField="inspecOrder" editable="true" sortable="false" itemRenderer="jp.co.ctc.components.ZeroOrderItemRenderer" width="35"/>
+				<mx:AdvancedDataGridColumn headerText="項目No." dataField="itemCode" editable="false" sortable="false" itemRenderer="jp.co.ctc.components.ZeroOrderItemRenderer" width="40"/>
+				<mx:AdvancedDataGridColumn headerText="MsgNo" itemRenderer="jp.co.ctc.components.ZeroOrderItemRenderer" width="30"  sortable="false" labelFunction="msgNoColumnFunction"/>
+				<mx:AdvancedDataGridColumn headerText="項目名" editable="false" sortable="false" itemRenderer="jp.co.ctc.components.ZeroOrderItemRenderer" labelFunction="itemNameColumnFunction" width="115"/>
+				<mx:AdvancedDataGridColumn headerText="更新者" dataField="updateUser" labelFunction="Utils.updateUserToLabel" itemRenderer="jp.co.ctc.components.ZeroOrderItemRenderer" sortable="false" width="50"/>
+				<mx:AdvancedDataGridColumn headerText="更新日" dataField="updateDate" labelFunction="Utils.updateDateToLabel" itemRenderer="jp.co.ctc.components.ZeroOrderItemRenderer" sortable="false" width="80"/>
+			</mx:columns>
+		</mx:AdvancedDataGrid>
+	</s:HGroup>
+	<s:HGroup width="100%" height="32" horizontalAlign="center" verticalAlign="middle">
+		<s:Button label="保存" height="30" id="btnSaveData" click="btnSaveData_clickHandler(event)"/>
+		<s:Button label="終了" height="30" id="btnExit" click="btnExit_clickHandler(event)"/>
+	</s:HGroup>
+</s:Application>

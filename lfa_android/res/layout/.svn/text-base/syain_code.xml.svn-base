@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="fill_parent"
+    android:layout_height="fill_parent"
+    android:orientation="vertical" >
+
+    <TextView
+        android:id="@+id/txtSyain"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/syainNo"
+        android:textSize="25sp" />
+
+    <LinearLayout
+        android:id="@+id/LinearLayout01"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:paddingBottom="20dp" >
+
+        <EditText
+            android:id="@+id/SyainNoInput"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:inputType="textAutoComplete|number"
+            android:selectAllOnFocus="true"
+            android:textSize="30sp" >
+
+        </EditText>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/LinearLayout02"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="20dp" >
+
+        <Button
+            android:id="@+id/OK"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/OK"
+            android:textSize="24sp" />
+
+        <Button
+            android:id="@+id/Cansel"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/Cansel"
+            android:textSize="24sp" >
+
+        </Button>
+    </LinearLayout>
+
+    <Button
+        android:id="@+id/PracticeMode"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/practiceMode"
+        android:textSize="18sp" />
+
+</LinearLayout>

@@ -1,0 +1,704 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!---
+DA 2014/10/29
+-->
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:mx="library://ns.adobe.com/flex/mx"
+			   pageTitle="誤欠品検出力向上ツール - 検査結果履歴"
+			   xmlns:components="jp.co.ctc.components.*"  minWidth="820"
+			   creationComplete="application1_creationCompleteHandler(event)" >
+	<s:layout>
+		<s:VerticalLayout paddingLeft="8" paddingRight="8" paddingTop="8" paddingBottom="8" horizontalAlign="center" gap="8"/>
+	</s:layout>
+
+	<fx:Style source="lfa_inspection.css"/>
+
+	<!-- 2016/02/24 DA ins start -->
+	<fx:Metadata>
+		[ResourceBundle("resource")]
+	</fx:Metadata>
+	<!-- 2016/02/24 DA ins end -->
+
+	<fx:Script>
+		<![CDATA[
+			import jp.co.ctc.components.CheckBox;
+			import jp.co.ctc.entity.MBcsignDTO;
+			import jp.co.ctc.entity.MVehicle;
+			import jp.co.ctc.event.MasterRegistEvent;
+			import jp.co.ctc.util.Utils;
+			
+			import mx.collections.ArrayCollection;
+			import mx.controls.Alert;
+			import mx.controls.DateField;
+			import mx.events.CloseEvent;
+			import mx.events.FlexEvent;
+			import mx.formatters.DateFormatter;
+			import mx.managers.CursorManager;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+
+			// Debug用 ****************************************
+			/**
+			 * Debug用
+			 */
+			public var isDebug:Boolean = false;
+
+			/**
+			 * 画面名
+			 */
+			public var TITLE:String = "検査結果履歴";
+
+			/**
+			 * 従業員コード
+			 */
+			public var loginUser:String = "dummy";
+
+			/**
+			 * グリッドのデータ
+			 */
+			[Bindable]
+			public var gridData:ArrayCollection;
+			
+			/**
+			 * 検索最大値
+			 */
+			public var InspecMax:int;
+
+			/**
+			 * 初期ロード時の処理。
+			 *
+			 */
+			protected function application1_creationCompleteHandler(event:FlexEvent):void
+			{
+				// Debug用 ****************************************
+				//　Debugログインさせ、ログインが行われたようにする。
+				//srvUser.login("1");
+
+				// Debug用
+				if(isDebug == true){
+
+				}
+				else{
+
+					srvUser.getUserCode();
+				}
+
+//				CursorManager.setBusyCursor();
+//				this.grid.enabled = false;
+
+
+				// Alertのボタンの幅を変更
+				// デフォルトの60だと"キャンセル"の文字が表示しきれない。
+				Alert.buttonWidth = 100;
+
+			}
+
+
+			/**
+			 * 検査結果履歴表示
+			 *
+			 */
+			protected function selectFResult_resultHandler(event:ResultEvent):void
+			{
+				// 検索が最大値を超えた時のメッセージ
+				if (event.result==null) {
+
+					Alert.show("検索結果が"　+ this.InspecMax.toString() 
+						+ "件を超えました。検索条件を見直してください。", TITLE);
+//					Alert.show("サーバー処理の呼出が出来ませんでした。", TITLE);	// 要MSG確認
+				}
+				else
+				{
+
+					this.gridData = event.result as ArrayCollection;
+				
+					// 件数結果が０件でした
+					if(this.gridData.length == 0){
+						Alert.show("件数結果が０件でした。",TITLE);	// 要MSG確認
+
+					}
+
+//					// 検索が最大値を超えた時のメッセージ
+//					if(this.gridData.length >= this.InspecMax){
+//						Alert.show("検索結果が"　+ this.InspecMax.toString() 
+//							+ "件を超えた為全てを表示していません", TITLE);
+//					}
+					
+					this.grid.dataProvider = this.gridData;
+
+				}
+				// 操作を受け付けるようにする
+				CursorManager.removeBusyCursor();
+				this.enabled = true;
+				grid.enabled = true;
+
+				// 2016/02/24 DA ins start
+				this.grid.initialize();
+				this.grid.dataProvider.refresh();
+				// 2016/02/24 DA ins end
+			}
+
+
+			/**
+			 * ユーザーコードの取得後の処理。
+			 * ユーザーコードを持っていなければログイン画面に戻します。
+			 */
+			protected function getUserCode_resultHandler(event:ResultEvent):void
+			{
+				
+				//ユーザコードがなければログインページに戻す
+				if (event.result==null) {
+					CursorManager.removeBusyCursor();
+					grid.enabled = true;
+					var request:URLRequest = new URLRequest("login.html");
+					navigateToURL(request, "_self");
+				}
+				else{
+					this.loginUser = event.result.toString();
+					//セレクトマスタを取得
+					srvUser.getSelectMst();
+				}
+			}
+
+			/**
+			 * セレクトマスタの取得後の処理。
+			 * 選択したマスタに対応した表示・処理を行います。
+			 */
+			protected function getSelectMst_resultHandler(event:ResultEvent):void
+			{
+
+				// 工程名検索
+//				srvGroup.getMGroupName();
+//				srvGroup.getMGroups("1", null, null);
+				srvGroup.getMGroupNames2();
+				// 検索最大値の取得
+				srvFResult.getInspecMax();
+			}
+
+
+			/**
+			 * 通信エラーの場合(Data取得Error Event)
+			 */
+			private function selectFResult_faultHandler(e:FaultEvent):void
+			{
+				CursorManager.removeBusyCursor();
+				this.enabled = true;
+				Alert.show("一覧取得処理でエラーが発生しました。", TITLE);	// 要MSG確認
+			}
+
+
+			/**
+			 * 表示された画面を閉じ、ページ遷移を行います。
+			 */
+			private function close():void
+			{
+				// マスタメンテナンスメニュー画面に遷移する
+				var request:URLRequest = new URLRequest("function_menu.html");
+				navigateToURL(request, "_self");
+			}
+
+			/**
+			 * 終了ボタン押下時の処理。
+			 */
+			private function btnExit_clickHandler(event:MouseEvent):void
+			{
+				// メニュー画面に戻る
+				close();
+			}
+
+			/**
+			 * 検索最大値の取得 
+			 */
+			private function getInspecMax_resultHandler(event:ResultEvent):void
+			{
+				this.InspecMax = event.result as int;
+			}
+
+			
+			/**
+			 * 画面表示ボタン、CSV出力押下時の処理。
+			 */
+			protected function btnSearch_clickHandler(event:MouseEvent):void
+			{
+				
+				//フレームNoチェック
+				if(txtFrameSeq.text != ""){
+					if(!InputCheckHanAN(txtFrameSeq.text)){
+						Alert.show("フレームNo.は半角英数字以外は無効です。",TITLE);
+						return;
+					}
+				}
+				//ボデーNoチェック
+				if(txtBodyNo.text != ""){
+					if(!InputCheckHanAN(txtBodyNo.text)){
+						Alert.show("ボデーNo.は半角英数字以外は無効です。",TITLE);
+						return;
+					}
+				}
+
+				var df:DateFormatter = new DateFormatter;
+				df.formatString = "YYYY/MM/DD JJ:NN:SS";
+				var sLoDateFrom:String = "1900/01/01 00:00:00";
+				var sLoDateTo:String   = "9999/12/31 23:59:59";
+				
+				//LO計画日の入力があれば日付チェック
+				if(txtLoDateFrom.text != "") {
+					sLoDateFrom = txtLoDateFrom.text.substr(0,4) 
+						+ "/" + txtLoDateFrom.text.substr(4,2)
+						+ "/" + txtLoDateFrom.text.substr(6,2)
+						+ " 00:00:00";
+					//不備があればNullが返ってくる
+					if(df.format(sLoDateFrom) == ""){
+						Alert.show("LO計画日は無効です。YYYYMMDDのフォーマットで入力してください。",TITLE);
+						return;
+					}
+				}
+				//LO計画日の入力があれば日付チェック
+				if(txtLoDateTo.text != ""){
+					sLoDateTo = txtLoDateTo.text.substr(0,4) 
+						+ "/" + txtLoDateTo.text.substr(4,2)
+						+ "/" + txtLoDateTo.text.substr(6,2)
+						+ " 23:59:59";
+					//不備があればNullが返ってくる
+					if(df.format(sLoDateTo) == ""){
+						Alert.show("LO計画日は無効です。YYYYMMDDのフォーマットで入力してください。",TITLE);
+						return;
+					}
+				}
+				//LO計画日の開始日と終了日の前後チェック
+				var dLoDateFrom:Date = new Date(Date.parse(sLoDateFrom));
+				var dLoDateTo:Date = new Date(Date.parse(sLoDateTo));
+				if(txtLoDateFrom.text != "" && txtLoDateTo.text != ""){
+					//falseが返ってくれば中断
+					if(!Utils.dateBeforeAfterCheck(dLoDateFrom, dLoDateTo)){
+						Alert.show("LO計画日は開始日<=終了日の条件で入力してください。",TITLE);
+						return;
+					}
+				}
+
+
+				var sInspecDateFrom:String = "1900/01/01 00:00:00";
+				var sInspecDateTo:String = "9999/12/31 23:59:59";
+				
+				//検査日時の入力があれば日付チェック
+				if(txtInspecDateFrom.text != ""){
+					sInspecDateFrom = txtInspecDateFrom.text.substr(0,4) 
+						+ "/" + txtInspecDateFrom.text.substr(4,2)
+						+ "/" + txtInspecDateFrom.text.substr(6,2)
+						+ " " + txtInspecDateFrom.text.substr(8,2)
+						+ ":" + txtInspecDateFrom.text.substr(10,2)
+						+ ":00";
+					//不備があればNullが返ってくる
+					if(txtInspecDateFrom.text.match(/^[0-9][0-9][0-9][0-9][0-1][0-9][0-3][0-9]([0-1][0-9]|[2][0-3])[0-5][0-9]$/) == null
+						|| df.format(sInspecDateFrom) == "" 
+						|| txtInspecDateFrom.text.length != 12
+						|| InputCheckHanNum(txtInspecDateFrom.text) == false){
+						Alert.show("検査日時は無効です。YYYYMMDDHHMMのフォーマットで入力してください。",TITLE);
+						return;
+					}
+				}
+				//検査日時の入力があれば日付チェック
+				if(txtInspecDateTo.text != ""){
+					sInspecDateTo = txtInspecDateTo.text.substr(0,4) 
+						+ "/" + txtInspecDateTo.text.substr(4,2)
+						+ "/" + txtInspecDateTo.text.substr(6,2)
+						+ " " + txtInspecDateTo.text.substr(8,2)
+						+ ":" + txtInspecDateTo.text.substr(10,2)
+						+ ":59";
+					//不備があればNullが返ってくる
+					if(txtInspecDateTo.text.match(/^[0-9][0-9][0-9][0-9][0-1][0-9][0-3][0-9]([0-1][0-9]|[2][0-3])[0-5][0-9]$/) == null
+						|| df.format(sInspecDateTo) == "" 
+						|| txtInspecDateTo.text.length != 12
+						|| InputCheckHanNum(txtInspecDateTo.text) == false){
+						Alert.show("検査日時は無効です。YYYYMMDDHHMMのフォーマットで入力してください。",TITLE);
+						return;
+					}
+				}
+
+				//検査日時の開始日と終了日の前後チェック
+				var dInspecDateFrom:Date = new Date(Date.parse(sInspecDateFrom));
+				var dInspecDateTo:Date = new Date(Date.parse(sInspecDateTo));
+				if(txtInspecDateFrom.text != "" && txtInspecDateTo.text != ""){
+					//falseが返ってくれば中断
+					if(!Utils.dateBeforeAfterCheck(dInspecDateFrom, dInspecDateTo)){
+						Alert.show("検査日時は開始日<=終了日の条件で入力してください。",TITLE);
+						return;
+					}
+				}
+				
+				// 工程名
+				var sGroupName:String = null;
+				if (ddlGroupName.selectedIndex != -1) {
+//					sGroupName = ddlGroupName.selectedItem.groupName;
+					sGroupName = ddlGroupName.selectedItem;
+				}
+					
+				//画面表示ボタン
+				if ("btnSearch" == event.currentTarget.id) {
+					// 画面を非活性にする
+					this.enabled = false;
+
+					//　検索結果一覧取得処理 
+					srvFResult.selectFResult(
+						 txtFrameSeq.text
+						,txtBodyNo.text
+						,txtLoDateFrom.text == "" ? "19000101" : txtLoDateFrom.text  
+						,txtLoDateTo.text == "" ? "99991231" : txtLoDateTo.text 
+						,sGroupName
+						,ddlInspecResult.selectedItem
+						,txtUserCode.text
+						,dInspecDateFrom
+						,dInspecDateTo);
+					
+				// CSV出力ボタン
+				} else if ("btnExportCsv" == event.currentTarget.id) {
+					// 画面を非活性にする
+					this.enabled = false;
+					
+					//遷移先の「selectMst」に値を渡す
+					var vars:URLVariables = new URLVariables();
+					vars.frameSeq = txtFrameSeq.text;
+					vars.bodyNo = txtBodyNo.text;
+					vars.loDateFrom = txtLoDateFrom.text == "" ? "19000101" : txtLoDateFrom.text;  
+					vars.loDateTo = txtLoDateTo.text == "" ? "99991231" : txtLoDateTo.text; 
+					vars.groupName = sGroupName;
+					vars.inspecResult = ddlInspecResult.selectedItem;
+					vars.userCode = txtUserCode.text;
+					vars.inspecDateFrom = sInspecDateFrom;
+					vars.inspecDateTo = sInspecDateTo;
+
+					vars.fromPage = "MasterMenu"
+					// CSV出力用URLの呼び出し
+					var request:URLRequest = new URLRequest("../FResultInspect/export");
+					request.data = vars;
+					navigateToURL(request);
+
+					// 画面を非活性にする
+					this.enabled = true;
+					
+				}
+				
+			}
+
+			/**
+			 * 半角英数字入力チェック。
+			 * @return true:チェックOK　false:チェックNG
+			 */
+			public function InputCheckHanAN(Input:String):Boolean
+			{
+				for (var i:int=0;i<Input.length;i++) {
+					var char_teamCode:String = Input.charAt(i)
+					if(char_teamCode.match(/[0-9A-Za-z]/) == null){
+						return false;
+					}
+				}
+				return true;
+			}
+
+			/**
+			 * 半角数字入力チェック。
+			 * @return true:チェックOK　false:チェックNG
+			 */
+			public function InputCheckHanNum(Input:String):Boolean
+			{
+				for (var i:int=0;i<Input.length;i++) {
+					var char_teamCode:String = Input.charAt(i)
+					if(char_teamCode.match(/[0-9]/) == null){
+						return false;
+					}
+				}
+				return true;
+			}
+
+			/* DataGridのカラムを編集  start---------- */
+			/**
+			 * フレーム連番に表示する文字列を取得
+			 */
+			protected function frameSeq_LabelFunction(data:Object, column:AdvancedDataGridColumn):String
+			{
+				return data.fBcdata == null ? null : data.fBcdata.frameSeq;
+			}
+			/**
+			 * 組み立て連番に表示する文字列を取得
+			 */
+			protected function bcnoH0_LabelFunction(data:Object, column:AdvancedDataGridColumn):String
+			{
+				return data.fBcdata == null ? null : data.fBcdata.bcnoH0;
+			}
+			/**
+			 * BC車種区分コードに表示する文字列を取得
+			 */
+			protected function bctype_LabelFunction(data:Object, column:AdvancedDataGridColumn):String
+			{
+				return data.fBcdata == null ? null : data.fBcdata.bctype;
+			}
+			/**
+			 * 工程名に表示する文字列を取得
+			 */
+			protected function groupName_LabelFunction(data:Object, column:AdvancedDataGridColumn):String
+			{
+				return data.mOrder.mGroup == null ? null : data.mOrder.mGroup.groupName;
+			}
+			/**
+			 * 検査順に表示する文字列を取得
+			 */
+			protected function inspecOrder_LabelFunction(data:Object, column:AdvancedDataGridColumn):String
+			{
+				return data.mOrder == null ? null : data.mOrder.inspecOrder;
+			}
+			/**
+			 * 項目コードに表示する文字列を取得
+			 */
+			protected function itemCode_LabelFunction(data:Object, column:AdvancedDataGridColumn):String
+			{
+				return data.mItem == null ? null : data.mItem.itemCode;
+			}
+			/**
+			 * 項目名称に表示する文字列を取得
+			 */
+			protected function itemName_LabelFunction(data:Object, column:AdvancedDataGridColumn):String
+			{
+				return data.mItem == null ? null : data.mItem.itemName;
+			}
+			/**
+			 * 指示記号に表示する文字列を取得
+			 */
+			protected function bcSign_LabelFunction(data:Object, column:AdvancedDataGridColumn):String
+			{
+				return data.mBcsign == null ? null : data.mBcsign.bcSign;
+			}
+			/**
+			 * 正解値に表示する文字列を取得
+			 */
+			protected function signContents1_LabelFunction(data:Object, column:AdvancedDataGridColumn):String
+			{
+				var signContents:String = null;
+				for each(var mbcsign:Object in data.mItem.mBcsignList){
+					if (data.bcSign == mbcsign.bcSign) {
+						signContents = mbcsign.signContents;
+						break;
+					}
+				}
+				return signContents;
+			}
+			/**
+			 * 入力値に表示する文字列を取得
+			 */
+			protected function signContents2_LabelFunction(data:Object, column:AdvancedDataGridColumn):String
+			{
+				var signContents:String = null;
+				for each(var mbcsign:Object in data.mItem.mBcsignList){
+					if (data.inputData == mbcsign.bcSign) {
+						signContents = mbcsign.signContents;
+						break;
+					}
+				}
+				return signContents;
+			}
+			/**
+			 * 検査結果に表示する文字列を取得
+			 */
+			protected function inspecResult_LabelFunction(data:Object, column:AdvancedDataGridColumn):String
+			{
+				var inspecResultName:String = null;
+				if (data.inspecResult == "0") {
+					inspecResultName = "OK";
+				} else if (data.inspecResult == "1") {
+					inspecResultName = "NG";
+				} else if (data.inspecResult == "2") {
+					inspecResultName = "ﾀﾞﾐｰ検出";
+				} else if (data.inspecResult == "3") {
+					inspecResultName = "ﾀﾞﾐｰ見逃し";
+
+				// 2016/02/24 DA ins start
+				} else if (data.inspecResult == "4") {
+					inspecResultName = "-";
+				// 2016/02/24 DA ins end
+				}
+				return inspecResultName;
+			}
+			/**
+			 * NG理由に表示する文字列を取得
+			 */
+			protected function ngReason_LabelFunction(data:Object, column:AdvancedDataGridColumn):String
+			{
+				var ngReasonName:String = null;
+				if ("0" == data.ngReason) {
+					ngReasonName = "誤品";
+				} else if ("1" == data.ngReason) {
+					ngReasonName = "欠品";
+				} else if ("2" == data.ngReason) {
+					ngReasonName = "不要";
+				} else if ("3" == data.ngReason) {
+					ngReasonName = "その他";
+				} else if ("5" == data.ngReason) {
+					ngReasonName = "特設OK";
+				}
+				return ngReasonName;
+			}
+			/**
+			 * 従業員氏名に表示する文字列を取得
+			 */
+			protected function userName_LabelFunction(data:Object, column:AdvancedDataGridColumn):String
+			{
+				return data.mUser == null ? null : data.mUser.userName;
+			}
+			/**
+			 * 検査日時カラムに値をバインドする
+			 */
+			private function inspecDate_LabelFunction(data:Object, column:AdvancedDataGridColumn):String {
+				var formatter:DateFormatter = new DateFormatter();
+				formatter.formatString = 'YYYY/MM/DD JJ:NN:SS';
+				return formatter.format(data.inspecDate);
+			}
+			/**
+			 * 作成日カラムに値をバインドする
+			 */
+			private function insertDate_LabelFunction(data:Object, column:AdvancedDataGridColumn):String {
+				var formatter:DateFormatter = new DateFormatter();
+				formatter.formatString = 'YYYY/MM/DD JJ:NN:SS';
+				return formatter.format(data.fBcdata.insertDate);
+			}
+			/**
+			 * アイデントNoに表示する文字列を取得
+			 */
+			protected function idno_LabelFunction(data:Object, column:AdvancedDataGridColumn):String
+			{
+				return data.fBcdata == null ? null : data.fBcdata.idno;
+			}
+			/**
+			 * 工程Noに表示する文字列を取得
+			 */
+			protected function groupNo_LabelFunction(data:Object, column:AdvancedDataGridColumn):String
+			{
+				return data.mOrder.mGroup == null ? null : data.mOrder.mGroup.groupNo;
+			}
+			/* DataGridのカラムを編集  end---------- */
+
+		]]>
+	</fx:Script>
+
+
+
+	<fx:Declarations>
+		<!-- 非ビジュアルエレメント (サービス、値オブジェクトなど) をここに配置 -->
+		<s:RemoteObject id="srvGroup" destination="MGroupService" />
+		
+		<s:RemoteObject id="srvFResult" destination="FResultService" >
+			<s:method name="selectFResult" result="selectFResult_resultHandler(event)" fault="selectFResult_faultHandler(event)" />
+			<s:method name="getInspecMax" result="getInspecMax_resultHandler(event)"/>
+		</s:RemoteObject>
+		
+		<s:RemoteObject id="srvUser" destination="MUserService">
+			<s:method name="getUserCode" result="getUserCode_resultHandler(event)"/>
+			<s:method name="getSelectMst" result="getSelectMst_resultHandler(event)"/>
+		</s:RemoteObject>
+
+	</fx:Declarations>
+
+
+	<s:HGroup width="100%" height="24" verticalAlign="middle" fontFamily="ＭＳ ゴシック">
+		<s:Label text="検査結果履歴画面" fontSize="14" fontWeight="bold"/>
+	</s:HGroup>
+	<s:HGroup width="100%" height="24" verticalAlign="middle" fontFamily="ＭＳ ゴシック">
+		<s:Label width="70" text="フレームNo" verticalAlign="middle"/>
+		<s:TextInput id="txtFrameSeq" maxChars="7" width="140" tabIndex="1"/>
+		<s:Label width="25"/>
+		<s:Label width="80" text="ボデーNo" verticalAlign="middle"/>
+		<s:TextInput id="txtBodyNo" width="110" maxChars="5" tabIndex="2"/>
+		<s:Label width="25"/>
+		
+		<s:Label width="70" text="LO計画日" textAlign="right" verticalAlign="middle"/>
+		<s:TextInput id="txtLoDateFrom" width="110" maxChars="8" tabIndex="3"/>
+		<s:Label text="～" verticalAlign="middle"/>
+		<s:TextInput id="txtLoDateTo" width="110" maxChars="8" tabIndex="4"/>
+		<s:Label width="25"/>
+		<s:Button label="画面表示"  id="btnSearch" fontSize="12" height="30" click="btnSearch_clickHandler(event)" tabIndex="5"/>
+	</s:HGroup>
+	<s:HGroup width="100%" height="24" verticalAlign="middle" fontFamily="ＭＳ ゴシック">
+		<s:Label width="70" text="工程" verticalAlign="middle"/>
+		<s:DropDownList id="ddlGroupName" width="180" tabIndex="6"
+						dataProvider="{srvGroup.getMGroupNames2.lastResult}" ></s:DropDownList>
+		<s:Label width="25"/>
+		<s:Label width="40"/>
+		<s:Label width="110"/>
+		<s:Label width="25"/>
+		<s:Label width="70"/>
+		<s:Label width="110"/>
+		<s:Label width="12"/>
+		<s:Label width="110"/>
+		<s:Label width="25"/>
+		<s:Button label="CSV出力"  id="btnExportCsv" fontSize="12" height="30" click="btnSearch_clickHandler(event)" tabIndex="7"/>
+	</s:HGroup>
+	<s:HGroup width="100%" height="24" verticalAlign="middle" fontFamily="ＭＳ ゴシック">
+		<s:Label width="70" text="検査結果" verticalAlign="middle"/>
+		<s:DropDownList id="ddlInspecResult" width="140" tabIndex="8">
+			<mx:ArrayCollection>
+				<fx:String></fx:String>
+				<fx:String>OK</fx:String>
+				<fx:String>NG</fx:String>
+				<fx:String>ﾀﾞﾐｰ検出</fx:String>
+				<fx:String>ﾀﾞﾐｰ見逃し</fx:String>
+				<!-- 2016/02/24 DA ins start -->
+				<fx:String>-</fx:String>
+				<!-- 2016/02/24 DA ins end -->
+			</mx:ArrayCollection>		
+		</s:DropDownList>
+		<s:Label width="25"/>
+		<s:Label width="80" text="従業員コード" verticalAlign="middle"/>
+		<s:TextInput id="txtUserCode" maxChars="7" width="110" tabIndex="9"/>
+		<s:Label width="25"/>
+		<s:Label width="70" text="検査日時" textAlign="right" verticalAlign="middle"/>
+		<s:TextInput id="txtInspecDateFrom" width="110" maxChars="12" tabIndex="10"/>
+		<s:Label text="～" verticalAlign="middle"/>
+		<s:TextInput id="txtInspecDateTo" width="110" maxChars="12" tabIndex="11"/>
+	</s:HGroup>
+
+	<mx:AdvancedDataGrid id="grid" width="100%" height="100%" allowMultipleSelection="false"
+						 designViewDataType="flat" dragEnabled="false" dropEnabled="false"
+						 headerSortSeparatorSkin="mx.skins.ProgrammaticSkin"
+						 horizontalScrollPolicy="on" rowCount="10" sortExpertMode="true"
+						 verticalAlign="middle">
+
+		<mx:columns>
+			<mx:AdvancedDataGridColumn headerText="フレームNo" width="80" dataField="fBcdata" sortable="false" labelFunction="frameSeq_LabelFunction"/>
+			<mx:AdvancedDataGridColumn headerText="ボデーNo" width="70" dataField="bodyNo" sortable="false" />
+			<mx:AdvancedDataGridColumn headerText="LO計画日" width="80" dataField="loDate" sortable="false" />
+			<mx:AdvancedDataGridColumn headerText="組立連番" width="70" dataField="bcnoH0" sortable="false" labelFunction="bcnoH0_LabelFunction"/>
+			<mx:AdvancedDataGridColumn headerText="車種区分" width="70" dataField="bctype" sortable="false" labelFunction="bctype_LabelFunction"/>
+			<mx:AdvancedDataGridColumn headerText="検査工程" width="130" dataField="groupName" sortable="false" labelFunction="groupName_LabelFunction"/>
+			<mx:AdvancedDataGridColumn headerText="検査順序No" width="80" dataField="inspecOrder" sortable="false" labelFunction="inspecOrder_LabelFunction"/>
+			<mx:AdvancedDataGridColumn headerText="項目CODE" width="80" dataField="itemCode" sortable="false" labelFunction="itemCode_LabelFunction"/>
+			<mx:AdvancedDataGridColumn headerText="項目名" width="130" dataField="itemName" sortable="false" labelFunction="itemName_LabelFunction"/>
+			<mx:AdvancedDataGridColumn headerText="検査回数" width="70" dataField="inspecNo" sortable="false" />
+			<!-- 2016/02/24 DA ins start -->
+			<!-- 選択回数 -->
+			<mx:AdvancedDataGridColumn headerText="{resourceManager.getString('resource','cli1400001')}" width="70" dataField="selectNumber" sortable="false" />
+			<!-- 2016/02/24 DA ins end -->
+			<mx:AdvancedDataGridColumn headerText="正解記号" width="70" dataField="bcSign" sortable="false" />
+			<mx:AdvancedDataGridColumn headerText="マスタ設定値" width="130" dataField="signContents1" sortable="false" labelFunction="signContents1_LabelFunction"/>
+			<mx:AdvancedDataGridColumn headerText="入力記号" width="70" dataField="inputData" sortable="false" />
+			<mx:AdvancedDataGridColumn headerText="入力値" width="130" dataField="signContents2" sortable="false" labelFunction="signContents2_LabelFunction"/>
+			<mx:AdvancedDataGridColumn headerText="検査結果" width="70" dataField="inspecResult" sortable="false" labelFunction="inspecResult_LabelFunction"/>
+			<mx:AdvancedDataGridColumn headerText="NG理由" width="70" dataField="ngReason" sortable="false" labelFunction="ngReason_LabelFunction"/>
+			<!-- 2017/12/01 DA ins start -->
+			<!-- 撮影画像 -->
+			<mx:AdvancedDataGridColumn headerText="{resourceManager.getString('resource','cli1400002')}" width="70" sortable="false" itemRenderer="jp.co.ctc.components.ShowShotimageButton" />
+			<!-- 2017/12/01 DA ins end -->
+			<mx:AdvancedDataGridColumn headerText="検査員名" width="80" dataField="user_name" sortable="false" labelFunction="userName_LabelFunction"/>
+			<mx:AdvancedDataGridColumn headerText="検査日時" width="120" dataField="inspecDate" sortable="false" labelFunction="inspecDate_LabelFunction"/>
+			<mx:AdvancedDataGridColumn headerText="作成日" visible="false" width="120" dataField="insertDate" sortable="false" labelFunction="insertDate_LabelFunction"/>
+			<mx:AdvancedDataGridColumn headerText="アイデントNo" visible="false" width="80" dataField="idno" sortable="false" labelFunction="idno_LabelFunction"/>
+			<mx:AdvancedDataGridColumn headerText="工程No" visible="false" width="80" dataField="groupNo" sortable="false" labelFunction="groupNo_LabelFunction"/>
+		</mx:columns>
+
+
+	</mx:AdvancedDataGrid>
+
+	<s:HGroup width="200" height="30" verticalAlign="middle" horizontalAlign="center">
+
+		<s:Button label="終了" height="30" id="btnExit" click="btnExit_clickHandler(event)"/>
+	</s:HGroup>
+
+</s:Application>

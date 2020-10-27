@@ -1,0 +1,444 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:mx="library://ns.adobe.com/flex/mx"
+			   creationComplete="application1_creationCompleteHandler(event)"
+			   pageTitle="ダミーチェック設定">
+	<s:layout>
+		<s:VerticalLayout paddingLeft="8" paddingRight="8" paddingTop="8" paddingBottom="8"/>
+	</s:layout>
+	<fx:Style source="lfa_inspection.css"/>
+	<fx:Script>
+		<![CDATA[
+			import jp.co.ctc.entity.FBcdata;
+			import jp.co.ctc.entity.FBcdataDummy;
+			import jp.co.ctc.util.Utils;
+
+			import mx.collections.ArrayCollection;
+			import mx.controls.Alert;
+			import mx.controls.ComboBox;
+			import mx.events.AdvancedDataGridEvent;
+			import mx.events.CloseEvent;
+			import mx.events.CollectionEvent;
+			import mx.events.CollectionEventKind;
+			import mx.events.DropdownEvent;
+			import mx.events.FlexEvent;
+			import mx.events.PropertyChangeEvent;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+
+			private var rmenu:ContextMenu;
+			private var rmenuitem1:ContextMenuItem;
+			private var rmenuitem2:ContextMenuItem;
+
+			private var loginUser:String;
+
+			public var TITLE:String = "ダミーチェック設定";
+
+
+			/**
+			 * アプリケーション初期化
+			 */
+			protected function application1_creationCompleteHandler(event:FlexEvent):void
+			{
+				// Debug用 ****************************************
+				//　Debugログインさせ、ログインが行われたようにする。
+				//srvUser.login("1");
+
+				// Alertのボタンの幅を変更
+				// デフォルトの60だと"キャンセル"の文字が表示しきれない。
+				Alert.buttonWidth = 100;
+
+				//ユーザーコードを取得
+				srvUser.getUserCode();
+
+				// コンテキストメニューの作成
+				rmenu = new ContextMenu();
+				rmenu.hideBuiltInItems();
+				rmenuitem1 = new ContextMenuItem("行を追加");
+				rmenuitem1.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, addRowHandler);
+				rmenu.customItems.push(rmenuitem1);
+				adg1.contextMenu = rmenu;
+
+				srvFBcdataDummy.selectAll();
+			}
+
+
+			/**
+			 * ユーザーコードの取得後の処理。
+			 * ユーザーコードを持っていなければログイン画面に戻します。
+			 */
+			protected function getUserCode_resultHandler(event:ResultEvent):void
+			{
+				if (event.result == null)
+				{
+					// ユーザコードがなければログインページに戻す
+					var request:URLRequest = new URLRequest("login.html");
+					navigateToURL(request, "_self");
+				}
+				else{
+					this.loginUser = event.result.toString();
+				}
+			}
+
+
+			/**
+			 * 行追加の処理
+			 */
+			private function addRowHandler(event:ContextMenuEvent):void
+			{
+				var ac:ArrayCollection = this.adg1.dataProvider as ArrayCollection;
+				if (ac.length > 0 && ac.getItemAt(0).idno == null)
+				{
+					// 複数行を同時に追加するのは禁止
+					Alert.show("編集中の行があるため、行追加できません。\n編集中の行を登録または解除してください。", TITLE);
+				}
+				else
+				{
+					// 新規行を追加
+					var newRecord:FBcdataDummy = new FBcdataDummy();
+					// 2016/02/24 DA ins start
+					newRecord.itemCode = "";
+					newRecord.specifiedSign = "";
+					newRecord.dummySign = "";
+					// 2016/02/24 DA ins end
+					ac.addItemAt(newRecord, 0);
+				}
+			}
+
+
+			/**
+			 * グリッドの車種欄に表示する文字列を取得
+			 */
+			protected function vehicleName_labelFunction(data:Object, column:AdvancedDataGridColumn):String
+			{
+				return data.fBcdata == null ? null : data.fBcdata.mVehicle.vehicleName;
+			}
+
+
+			/**
+			 * グリッドの車両欄に表示する文字列を取得
+			 */
+			protected function bodyNo_labelFunction(data:Object, column:AdvancedDataGridColumn):String
+			{
+				return data.fBcdata == null ? null : data.fBcdata.bcnoH0 + "  " + data.fBcdata.bodyNo;
+			}
+
+
+			/**
+			 * グリッドの検査項目名欄に表示する文字列を取得
+			 */
+			protected function itemName_labelFunction(data:Object, column:AdvancedDataGridColumn):String
+			{
+				return data.mItem == null ? null : data.mItem.itemName;
+			}
+
+
+			/**
+			 * グリッドのMsgNo欄に表示する文字列を取得
+			 */
+			protected function msgno_labelFunction(data:Object, column:AdvancedDataGridColumn):String
+			{
+				return data.mItem == null ? null : data.mItem.msgNo;
+			}
+
+
+			/**
+			 * グリッドの車両欄のコンボボックスを開いたときの処理
+			 */
+			public function combobox_openHandler(event:DropdownEvent):void
+			{
+				// 指定した検査項目、記号に該当する車両を検索
+				var data:FBcdataDummy = event.currentTarget.data as FBcdataDummy;
+				srvFBcdataDummy.targetBodies(data.itemCode, data.specifiedSign);
+			}
+
+
+			/**
+			 * 検索後の処理
+			 */
+			protected function selectAll_resultHandler(event:ResultEvent):void
+			{
+				// 2016/02/24 DA ins start
+				this.adg1.initialize();
+				this.adg1.dataProvider.refresh();
+				// 2016/02/24 DA ins end
+			}
+			
+			
+			/**
+			 * 検索に失敗したときの処理
+			 */
+			protected function selectAll_faultHandler(event:FaultEvent):void
+			{
+				Alert.show("一覧取得処理でエラーが発生しました。",TITLE);
+			}
+			
+			
+			/**
+			 * 対象車両検索後の処理
+			 */
+			protected function targetBodies_resultHandler(event:ResultEvent):void
+			{
+				if (event.result == null || event.result.length == 0)
+				{
+					Alert.show("指定された検査項目、正解記号にて対象車両がありません。", TITLE);
+				}
+			}
+
+
+			/**
+			 * 対象車両検索に失敗したときの処理
+			 */
+			protected function targetBodies_faultHandler(event:FaultEvent):void
+			{
+				Alert.show("車両情報取得に失敗しました。\n" + event.fault.rootCause.message, TITLE);
+			}
+
+
+			/**
+			 * 登録ボタン押下時の処理
+			 */
+			public function update_clickHandler(event:MouseEvent):void
+			{
+				var data:FBcdataDummy = event.currentTarget.data as FBcdataDummy;
+
+				// 入力チェック
+				if (Utils.isSpaceJ(data.itemCode))
+				{
+					Alert.show("項目Noを入力してください", TITLE);
+					return;
+				}
+
+				// 入力チェック
+				if (Utils.isSpaceJ(data.specifiedSign))
+				{
+					Alert.show("正解記号を入力してください", TITLE);
+					return;
+				}
+
+				// 入力チェック
+				if (Utils.isSpaceJ(data.dummySign))
+				{
+					Alert.show("ダミー記号を入力してください", TITLE);
+					return;
+				}
+
+				// 入力チェック
+				if (Utils.jTrim(data.specifiedSign) == Utils.jTrim(data.dummySign))
+				{
+					Alert.show("正解記号とダミー記号には、異なる記号を入力してください", TITLE);
+					return;
+				}
+
+				// 入力チェック
+				if (data.fBcdata == null)
+				{
+					Alert.show("車両を選択してください", TITLE);
+					return;
+				}
+
+				// 2016/02/24 DA ins start
+				// 末尾の空白を削除
+				data.dummySign = Utils.jTrim(data.dummySign);
+				// 2016/02/24 DA ins end
+				
+				// サーバー処理呼び出し
+				data.updateUser = loginUser;
+				srvFBcdataDummy.updateEntity(data);
+			}
+
+
+			/**
+			 * 登録成功後の処理
+			 */
+			protected function updateEntity_resultHandler(event:ResultEvent):void
+			{
+				srvFBcdataDummy.selectAll();
+			}
+
+
+			/**
+			 * 登録失敗時の処理
+			 */
+			protected function updateEntity_faultHandler(event:FaultEvent):void
+			{
+				Alert.show("ダミーチェック登録に失敗しました。\n" + event.fault.rootCause.message, TITLE);
+			}
+
+
+			/**
+			 * 解除ボタン押下時の処理
+			 */
+			public function cancel_clickHandler(event:MouseEvent):void
+			{
+				var data:FBcdataDummy = event.currentTarget.data as FBcdataDummy;
+				if (data.idno == null)
+				{
+					// 未登録の行の場合、一覧をリセット → 編集中の行はクリア
+					srvFBcdataDummy.selectAll();
+					return;
+				}
+
+				// 登録済み行の場合、確認ダイアログ表示し、削除処理を実行
+				Alert.show("ダミーチェック設定を解除します。よろしいですか？", TITLE,
+					Alert.OK | Alert.CANCEL, this,
+					function(event:CloseEvent):void
+					{
+						if (event.detail == Alert.OK)
+						{
+							// 削除処理を実行
+							srvFBcdataDummy.deleteEntity(data);
+						}
+					},
+					// 2016/08/29 DA ins start
+					null,
+					Alert.CANCEL
+					// 2016/08/29 DA ins end
+				);
+			}
+
+
+			/**
+			 * グリッド編集開始時の処理
+			 */
+			protected function adg1_itemEditBeginHandler(event:AdvancedDataGridEvent):void
+			{
+				// 登録済みの行は編集不可
+				if (event.itemRenderer.data.idno != null)
+				{
+					event.preventDefault();
+				}
+			}
+
+
+			/**
+			 * 指示記号マスタメンテボタン押下時の処理
+			 */
+			protected function btnBcsign_clickHandler(event:MouseEvent):void
+			{
+				// 指示マスタメンテナンス画面に遷移する
+				var request:URLRequest = new URLRequest("bcsign_mainte.html");
+				navigateToURL(request, "_self");
+			}
+
+
+			/**
+			 * メニューボタン押下時の処理
+			 */
+			protected function btnMenu_clickHandler(event:MouseEvent):void
+			{
+				// マスタメンテナンスメニュー画面に遷移する
+				var request:URLRequest = new URLRequest("master_menu.html");
+				navigateToURL(request, "_self");
+			}
+
+
+			/**
+			 * グリッド内のデータを編集したときの処理
+			 */
+			protected function acGrid_collectionChangeHandler(event:CollectionEvent):void
+			{
+				switch (event.kind) {
+				case CollectionEventKind.UPDATE:
+					// データ更新されたときの処理
+					var propertyChangeEvent:PropertyChangeEvent = event.items[0] as PropertyChangeEvent;
+					if ((propertyChangeEvent.property == "itemCode" ||
+						 propertyChangeEvent.property == "specifiedSign") &&
+						propertyChangeEvent.newValue != propertyChangeEvent.oldValue)
+					{
+						// 項目Noまたは正解記号が変更された場合は、
+						propertyChangeEvent.source.fBcdata = null;
+						srvFBcdataDummy.targetBodies.clearResult(true);
+					}
+				break;
+				}
+			}
+
+		]]>
+	</fx:Script>
+	<fx:Declarations>
+		<!-- 非ビジュアルエレメント (サービス、値オブジェクトなど) をここに配置 -->
+		<s:RemoteObject id="srvFBcdataDummy" destination="FBcdataDummyService" showBusyCursor="true">
+			<s:method name="selectAll" result="selectAll_resultHandler(event)" fault="selectAll_faultHandler(event)" />
+			<s:method name="targetBodies" result="targetBodies_resultHandler(event)" fault="targetBodies_faultHandler(event)" />
+			<s:method name="updateEntity" result="updateEntity_resultHandler(event)" fault="updateEntity_faultHandler(event)" />
+			<s:method name="deleteEntity" result="updateEntity_resultHandler(event)" fault="updateEntity_faultHandler(event)"  />
+		</s:RemoteObject>
+
+		<s:RemoteObject id="srvUser" destination="MUserService">
+			<s:method name="getUserCode" result="getUserCode_resultHandler(event)"/>
+		</s:RemoteObject>
+
+		<s:ArrayCollection id="acGrid" collectionChange="acGrid_collectionChangeHandler(event)" list="{srvFBcdataDummy.selectAll.lastResult}" />
+	</fx:Declarations>
+	<s:HGroup width="100%">
+		<s:Label text="ダミーチェック設定" fontSize="16" fontWeight="bold"/>
+	</s:HGroup>
+	<s:HGroup width="100%" height="100%">
+		<mx:AdvancedDataGrid id="adg1" designViewDataType="flat" width="100%" height="100%" sortExpertMode="true"
+							 dataProvider="{srvFBcdataDummy.selectAll.lastResult}" editable="true"
+							 itemEditBegin="adg1_itemEditBeginHandler(event)">
+			<mx:columns>
+				<mx:AdvancedDataGridColumn headerText="項目No" dataField="itemCode" sortable="false" width="40"/>
+				<mx:AdvancedDataGridColumn headerText="検査項目" labelFunction="itemName_labelFunction" editable="false" sortable="false" width="80"/>
+				<mx:AdvancedDataGridColumn headerText="MsgNo" labelFunction="msgno_labelFunction" editable="false" sortable="false" width="30"/>
+				<mx:AdvancedDataGridColumn headerText="正解記号" dataField="specifiedSign" sortable="false" width="40"/>
+				<mx:AdvancedDataGridColumn headerText="正解内容" dataField="specifiedContents" editable="false" sortable="false" width="80"/>
+				<mx:AdvancedDataGridColumn headerText="ﾀﾞﾐｰ記号" dataField="dummySign" editable="true" sortable="false" width="40"/>
+				<mx:AdvancedDataGridColumn headerText="ﾀﾞﾐｰ内容" dataField="dummyContents" editable="false" sortable="false" width="80"/>
+				<mx:AdvancedDataGridColumn headerText="車種" labelFunction="vehicleName_labelFunction" editable="false" sortable="false" width="30"/>
+				<mx:AdvancedDataGridColumn headerText="車両(組連, B#)" dataField="fBcdata" labelFunction="bodyNo_labelFunction" editorDataField="selectedItem" sortable="false" width="80">
+					<mx:itemEditor>
+						<fx:Component>
+							<mx:ComboBox labelFunction="combobox1_labelFunction" open="combobox1_openHandler(event)" editable="false"
+										 selectedIndex="-1" prompt="選択してください"
+										 dataProvider="{parentApplication.srvFBcdataDummy.targetBodies.lastResult}">
+								<fx:Script>
+									<![CDATA[
+										import mx.events.DropdownEvent;
+										import jp.co.ctc.util.Utils;
+
+										protected function combobox1_labelFunction(data:Object):String
+										{
+											return data.bcnoH0 + "  " + data.bodyNo;
+										}
+
+										protected function combobox1_openHandler(event:DropdownEvent):void
+										{
+											if (Utils.isEmpty(data.itemCode) == false && Utils.isEmpty(data.specifiedSign) == false && data.idno == null && dataProvider.length == 1 && dataProvider[0] == null)
+											{
+												parentApplication.combobox_openHandler(event);
+											}
+										}
+
+									]]>
+								</fx:Script>
+							</mx:ComboBox>
+						</fx:Component>
+					</mx:itemEditor>
+				</mx:AdvancedDataGridColumn>
+				<mx:AdvancedDataGridColumn headerText="登録者" dataField="updateUser" labelFunction="Utils.updateUserToLabel" sortable="false" editable="false" width="60"/>
+				<mx:AdvancedDataGridColumn headerText="登録日" dataField="updateDate" labelFunction="Utils.updateDateToLabel" sortable="false" editable="false" width="80"/>
+				<mx:AdvancedDataGridColumn headerText="登録" editable="false" sortable="false" width="40">
+					<mx:itemRenderer>
+						<fx:Component>
+							<mx:Button label="登録" click="parentApplication.update_clickHandler(event)" enabled="{data.idno == null}" />
+						</fx:Component>
+					</mx:itemRenderer>
+				</mx:AdvancedDataGridColumn>
+				<mx:AdvancedDataGridColumn headerText="解除" editable="false" sortable="false" width="40">
+					<mx:itemRenderer>
+						<fx:Component>
+							<mx:Button label="解除" click="parentApplication.cancel_clickHandler(event)" />
+						</fx:Component>
+					</mx:itemRenderer>
+				</mx:AdvancedDataGridColumn>
+			</mx:columns>
+		</mx:AdvancedDataGrid>
+	</s:HGroup>
+	<s:HGroup width="100%" verticalAlign="middle" textAlign="center" horizontalAlign="center">
+		<s:Button label="指示記号一覧を表示" height="30" id="btnBcsign" click="btnBcsign_clickHandler(event)"/>
+		<s:Button label="メニューに戻る" height="30" id="btnMenu" click="btnMenu_clickHandler(event)"/>
+	</s:HGroup>
+</s:Application>
